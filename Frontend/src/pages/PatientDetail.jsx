@@ -1,0 +1,198 @@
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { 
+  Image as ImageIcon, 
+  AlertCircle, 
+  Calendar, 
+  User, 
+  ArrowLeft, 
+  ExternalLink, 
+  ShieldCheck, 
+  Activity,
+  ChevronRight
+} from "lucide-react";
+import { motion } from "framer-motion";
+
+export default function PatientDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [patient, setPatient] = useState(null);
+  const [scans, setScans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchDetail();
+  }, [id]);
+
+  const fetchDetail = async () => {
+    const token = localStorage.getItem("access");
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/patients/patient/${id}/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error("Failed to load patient data");
+      setPatient(data.patient);
+      setScans(data.scans);
+    } catch (err) {
+      setError(err.message || "Server not reachable");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="w-full h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="w-full px-6 lg:px-16 py-12">
+      <div className="bg-red-50 border border-red-100 text-red-700 p-6 rounded-[2rem] flex items-center gap-3">
+        <AlertCircle size={24} />
+        <p className="text-lg font-bold">{error}</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }}
+      className="w-full min-h-screen bg-white px-6 lg:px-16 py-12 font-sans"
+    >
+      {/* TOP NAVIGATION */}
+      <button 
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 font-bold mb-8 transition-colors group"
+      >
+        <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+        Back to Directory
+      </button>
+
+      <div className="flex flex-col xl:flex-row gap-12">
+        
+        {/* LEFT COLUMN: PATIENT PROFILE CARD */}
+        <aside className="xl:w-1/3 space-y-6">
+          <div className="bg-gray-50 rounded-[3rem] p-10 sticky top-12">
+            <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-4xl font-black mb-6 shadow-xl shadow-indigo-100">
+              {patient.full_name.charAt(0)}
+            </div>
+            
+            <h1 className="text-4xl font-black text-gray-900 mb-2">{patient.full_name}</h1>
+            <p className="text-indigo-600 font-mono font-bold tracking-widest mb-8">{patient.patient_uid}</p>
+            
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white rounded-2xl shadow-sm text-gray-400"><User size={20} /></div>
+                <div><p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Demographics</p>
+                <p className="text-gray-700 font-bold">{patient.age} Years • {patient.gender}</p></div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white rounded-2xl shadow-sm text-gray-400"><Activity size={20} /></div>
+                <div><p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Contact Information</p>
+                <p className="text-gray-700 font-bold">{patient.phone || "No phone provided"}</p></div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white rounded-2xl shadow-sm text-gray-400"><ShieldCheck size={20} /></div>
+                <div><p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Resident Address</p>
+                <p className="text-gray-700 font-bold leading-relaxed">{patient.address || "Address not registered"}</p></div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => navigate('/upload', { state: { patientId: patient.id }})}
+              className="w-full mt-10 py-5 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+            >
+              Upload New Scan
+            </button>
+          </div>
+        </aside>
+
+        {/* RIGHT COLUMN: SCAN HISTORY */}
+        <main className="xl:w-2/3">
+          <div className="flex items-center justify-between mb-10">
+            <h2 className="text-3xl font-black text-gray-900">MRI History</h2>
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-bold text-gray-500">
+              {scans.length} Scans Records
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-8">
+            {scans.map((s) => (
+              <motion.div 
+                key={s.id}
+                whileHover={{ y: -5 }}
+                className="bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-xl transition-all flex flex-col md:flex-row"
+              >
+                {/* Image Preview Area */}
+                <div className="md:w-1/3 relative group">
+                  <img
+                    src={s.mri_image_url}
+                    className="h-full w-full object-cover min-h-[250px]"
+                    alt="Brain MRI"
+                  />
+                  <a 
+                    href={s.mri_image_url} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="absolute inset-0 bg-indigo-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold gap-2 backdrop-blur-sm"
+                  >
+                    <ExternalLink size={20} /> View Original
+                  </a>
+                </div>
+
+                {/* Data Area */}
+                <div className="md:w-2/3 p-8 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2 text-gray-400 font-bold text-sm uppercase">
+                        <Calendar size={16} />
+                        {new Date(s.scan_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </div>
+                      <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-xs font-black rounded-full uppercase">
+                        {s.status}
+                      </span>
+                    </div>
+
+                    <h3 className="text-2xl font-black text-gray-900 mb-2">
+                      Detection: <span className="text-indigo-600">{s.tumor_type}</span>
+                    </h3>
+                  </div>
+
+                  <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-black text-gray-400 uppercase mb-1">AI Confidence</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-48 h-3 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-600 rounded-full transition-all duration-1000"
+                            style={{ width: `${s.confidence * 100}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-lg font-black text-indigo-600">
+                          {(s.confidence * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+
+            {scans.length === 0 && (
+              <div className="py-20 bg-gray-50 rounded-[3rem] text-center border-2 border-dashed border-gray-200">
+                <ImageIcon className="mx-auto text-gray-300 mb-4" size={48} />
+                <p className="text-xl font-bold text-gray-400">No MRI data available for this patient.</p>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </motion.div>
+  );
+}
