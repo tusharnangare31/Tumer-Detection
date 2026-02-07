@@ -9,4 +9,5 @@ urlpatterns = [
     path("scans/", views.all_scans),   # ADD THIS: For Doctors (all scans)
     path("by-uid/<str:uid>/", views.get_patient_by_uid),
     path("create/", views.create_patient),
+    path("doctor-registry/", views.doctor_registry, name="doctor_registry"),
 ]

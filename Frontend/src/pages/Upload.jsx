@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Upload, Brain, CheckCircle, AlertCircle, Loader2, ArrowLeft, Image as ImageIcon, Globe } from "lucide-react";
+import { Upload, Brain, CheckCircle, Loader2, ArrowLeft, Image as ImageIcon, Globe, Sparkles, FileText, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown"; // Import this to render Gemini output
 
 export default function UploadPage() {
   const location = useLocation();
@@ -30,12 +31,13 @@ export default function UploadPage() {
 
     const fd = new FormData();
     fd.append("file", file);
+    
+    // Pass demographics if available (Optional: Hardcoded for demo if not in location.state)
+    // fd.append("age", "55");
+    // fd.append("gender", "Female");
 
-    // Determine Mode
     const isClinicalMode = token && patientId;
-    if (isClinicalMode) {
-      fd.append("patient_id", patientId);
-    }
+    if (isClinicalMode) fd.append("patient_id", patientId);
 
     const endpoint = isClinicalMode 
       ? "http://127.0.0.1:8000/api/patients/upload-scan/" 
@@ -47,19 +49,21 @@ export default function UploadPage() {
         headers: isClinicalMode ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
-
       const data = await res.json();
-
+      
       if (res.ok) {
         setResult({
           tumor_type: data.tumor_type || data.prediction || data.label,
           confidence: data.confidence || data.confidence_score || 0,
+          // ✅ Capture the Gemini Clinical Reasoning here
+          reasoning: data.clinical_reasoning || data.reasoning || null, 
           isSaved: isClinicalMode
         });
       } else {
         alert(data.error || "Analysis failed");
       }
     } catch (err) {
+      console.error(err);
       alert("Server connection failed");
     } finally {
       setLoading(false);
@@ -67,125 +71,160 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-white px-6 lg:px-16 py-12 font-sans overflow-x-hidden">
+    <div className="w-full min-h-screen bg-gray-50 flex flex-col items-center py-10 px-6 font-sans overflow-x-hidden">
       
-      {/* HEADER SECTION */}
-      <div className="w-full flex flex-col md:flex-row justify-between items-start mb-12 gap-6">
-        <div>
-          {patientId && (
-            <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 mb-4 hover:text-indigo-600 transition-colors font-bold">
-              <ArrowLeft size={20} /> Return to Profile
-            </button>
-          )}
-          <h1 className="text-5xl lg:text-6xl font-black text-gray-900 leading-tight">
-            {token && patientId ? "Clinical Diagnostic" : "Public AI Scanner"}
-          </h1>
-          <p className="text-xl text-gray-500 mt-2 flex items-center gap-2">
-            {token && patientId ? (
-              <><CheckCircle size={20} className="text-emerald-500"/> Direct Link: Patient #{patientId}</>
-            ) : (
-              <><Globe size={20} className="text-blue-500"/> Anonymous Mode: Data will not be stored</>
-            )}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <div className="w-full max-w-6xl">
         
-        {/* LEFT COLUMN: UPLOAD CONTROL */}
-        <div className="lg:col-span-5 space-y-8">
-          <div className="w-full h-[450px] border-4 border-dashed border-gray-100 rounded-[3rem] relative flex items-center justify-center overflow-hidden hover:bg-gray-50 transition-all group">
-            {preview ? (
-              <img src={preview} className="w-full h-full object-cover" alt="MRI Scan Preview" />
-            ) : (
-              <label className="flex flex-col items-center cursor-pointer p-10 text-center w-full h-full justify-center">
-                <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mb-6">
-                  <Upload size={32} className="text-indigo-600" />
-                </div>
-                <span className="text-2xl font-black text-gray-900">Select MRI Image</span>
-                <p className="text-gray-400 mt-2 text-lg">Select a .jpg, .png, or DICOM file</p>
-                <input type="file" className="hidden" onChange={handleFile} accept="image/*" />
-              </label>
-            )}
-            
-            {preview && (
-              <button 
-                onClick={() => { setFile(null); setPreview(null); setResult(null); }}
-                className="absolute top-6 right-6 bg-white/90 backdrop-blur-md px-6 py-2 rounded-2xl text-red-500 font-bold shadow-xl transition-transform hover:scale-105"
-              >
-                Change Image
+        {/* HEADER */}
+        <div className="w-full flex flex-col md:flex-row justify-between items-end mb-10 gap-6 px-4">
+          <div className="flex-1">
+            {patientId && (
+              <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-indigo-500 mb-2 hover:underline font-bold text-sm">
+                <ArrowLeft size={16} /> Return to Profile
               </button>
             )}
+            <h1 className="text-4xl lg:text-5xl font-black text-gray-900 leading-tight tracking-tighter">
+              {token && patientId ? "Clinical Diagnostic" : "AI Scan Engine"}
+            </h1>
+            <p className="text-lg text-gray-500 mt-1 flex items-center gap-2 font-medium">
+              {token && patientId ? (
+                <><CheckCircle size={18} className="text-emerald-500"/> Direct Link: Patient #{patientId}</>
+              ) : (
+                <><Globe size={18} className="text-blue-500"/> Public Sandbox Mode</>
+              )}
+            </p>
           </div>
-
-          <button
-            onClick={runAIAnalysis}
-            disabled={!file || loading}
-            className="w-full py-6 bg-indigo-600 disabled:bg-gray-300 text-white rounded-[2rem] font-black text-2xl shadow-2xl shadow-indigo-100 transition-all flex items-center justify-center gap-4 active:scale-[0.98]"
-          >
-            {loading ? <Loader2 className="animate-spin" size={28} /> : <Brain size={28} />}
-            {loading ? "Analyzing..." : "Run Intelligence Analysis"}
-          </button>
+          <div className="hidden md:block h-[1px] flex-1 bg-gray-200 mb-4 ml-10"></div>
         </div>
 
-        {/* RIGHT COLUMN: AI INTELLIGENCE RESULTS */}
-        <div className="lg:col-span-7">
-          <AnimatePresence mode="wait">
-            {result ? (
-              <motion.div 
-                key="result"
-                initial={{ opacity: 0, x: 20 }} 
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="p-12 bg-indigo-50/50 rounded-[3rem] border border-indigo-100 h-full flex flex-col justify-center"
-              >
-                <div className="text-center mb-10">
-                  <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-4">Neural Network Classification</p>
-                  <h2 className={`text-6xl font-black mb-4 ${result.tumor_type === 'notumor' ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {result.tumor_type === 'notumor' ? "Healthy Scan" : result.tumor_type.toUpperCase()}
-                  </h2>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* LEFT COLUMN: UPLOAD CONTROL */}
+          <div className="lg:col-span-5 flex flex-col gap-6 sticky top-10">
+            <div className="w-full h-[400px] bg-white border border-gray-100 rounded-[2.5rem] shadow-sm relative flex items-center justify-center overflow-hidden group">
+              {preview ? (
+                <img src={preview} className="w-full h-full object-cover" alt="MRI Scan Preview" />
+              ) : (
+                <label className="flex flex-col items-center cursor-pointer p-8 text-center w-full h-full justify-center hover:bg-indigo-50/30 transition-all">
+                  <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <Upload size={28} className="text-indigo-600" />
+                  </div>
+                  <span className="text-xl font-black text-gray-900">Select MRI Image</span>
+                  <p className="text-gray-400 mt-1 text-sm font-medium">JPG, PNG or DICOM supported</p>
+                  <input type="file" className="hidden" onChange={handleFile} accept="image/*" />
+                </label>
+              )}
+              
+              {preview && (
+                <button 
+                  onClick={() => { setFile(null); setPreview(null); setResult(null); }}
+                  className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-red-500 text-sm font-black shadow-lg hover:bg-red-50 transition-colors"
+                >
+                  Clear Image
+                </button>
+              )}
+            </div>
 
-                <div className="bg-white p-8 rounded-[2rem] shadow-sm mb-8">
-                  <div className="flex justify-between items-end mb-4">
-                    <div>
-                      <p className="text-indigo-900 font-black text-xl">AI Confidence Score</p>
-                      <p className="text-gray-400 text-sm italic tracking-tight font-medium">Model probability for current classification</p>
+            <button
+              onClick={runAIAnalysis}
+              disabled={!file || loading}
+              className="w-full py-5 bg-indigo-600 disabled:bg-gray-300 text-white rounded-2xl font-black text-xl shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-3 active:scale-95"
+            >
+              {loading ? <Loader2 className="animate-spin" size={24} /> : <Brain size={24} />}
+              {loading ? "Analyzing..." : "Run Analysis"}
+            </button>
+          </div>
+
+          {/* RIGHT COLUMN: AI INTELLIGENCE RESULTS */}
+          <div className="lg:col-span-7">
+            <AnimatePresence mode="wait">
+              {result ? (
+                <motion.div 
+                  key="result"
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col gap-6"
+                >
+                  {/* 1. STATISTICAL RESULT CARD */}
+                  <div className="p-10 bg-white border border-gray-100 rounded-[2.5rem] shadow-sm">
+                    <div className="mb-8">
+                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-2">Neural Classification</p>
+                      <h2 className={`text-5xl font-black leading-none ${result.tumor_type === 'notumor' ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {result.tumor_type === 'notumor' ? "Clear / Healthy" : result.tumor_type.toUpperCase()}
+                      </h2>
                     </div>
-                    <span className="text-4xl font-black text-indigo-600">
-                      {(result.confidence * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }} 
-                      animate={{ width: `${result.confidence * 100}%` }}
-                      transition={{ duration: 1.5, ease: "easeOut" }}
-                      className="h-full bg-indigo-600"
-                    />
-                  </div>
-                </div>
 
-                {result.isSaved ? (
-                  <div className="flex items-center gap-3 text-emerald-700 bg-emerald-100/50 p-5 rounded-2xl justify-center font-bold">
-                    <CheckCircle size={24} /> Scan permanently saved to patient history
+                    <div className="bg-indigo-50/50 p-6 rounded-2xl mb-4 border border-indigo-50">
+                      <div className="flex justify-between items-center mb-4">
+                        <p className="text-indigo-900 font-black">Confidence Score</p>
+                        <span className="text-2xl font-black text-indigo-600">
+                          {(result.confidence * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-white rounded-full overflow-hidden border border-indigo-100">
+                        <motion.div 
+                          initial={{ width: 0 }} 
+                          animate={{ width: `${result.confidence * 100}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className="h-full bg-indigo-600"
+                        />
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-3 text-blue-700 bg-blue-100/50 p-5 rounded-2xl justify-center font-bold italic">
-                    <Globe size={24} /> Prediction only: No clinical data was stored
+
+                  {/* 2. GEMINI REASONING CARD (New!) */}
+                  {result.reasoning && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="p-8 bg-gradient-to-br from-white to-blue-50/30 border border-blue-100 rounded-[2.5rem] shadow-sm relative overflow-hidden"
+                    >
+                      {/* Decorative sidebar */}
+                      <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
+                      
+                      <div className="flex items-center gap-3 mb-6 pl-4">
+                        <Sparkles className="text-blue-600 fill-blue-600" size={20} />
+                        <h3 className="text-sm font-black text-blue-900 uppercase tracking-widest">
+                          AI Clinical Reasoning
+                        </h3>
+                      </div>
+
+                      <div className="prose prose-sm max-w-none text-gray-700 font-medium leading-relaxed pl-4">
+                        <ReactMarkdown 
+                          components={{
+                            h1: ({node, ...props}) => <h1 className="text-lg font-bold text-gray-900 mt-4 mb-2" {...props} />,
+                            h2: ({node, ...props}) => <h2 className="text-md font-bold text-gray-800 mt-4 mb-2" {...props} />,
+                            strong: ({node, ...props}) => <span className="font-bold text-blue-800" {...props} />,
+                            ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-1 mb-4" {...props} />,
+                            li: ({node, ...props}) => <li className="text-gray-600" {...props} />,
+                          }}
+                        >
+                          {result.reasoning}
+                        </ReactMarkdown>
+                      </div>
+
+                      <div className="mt-8 pt-4 border-t border-blue-100 flex items-start gap-3 pl-4">
+                        <AlertTriangle size={16} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-gray-500 font-medium">
+                          <span className="font-bold text-gray-700">Disclaimer:</span> This reasoning is generated by an AI model (Gemini) for educational purposes only. It does not replace professional medical diagnosis.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                </motion.div>
+              ) : (
+                <div className="w-full h-full min-h-[400px] flex flex-col items-center justify-center text-center p-10 bg-white border border-gray-100 rounded-[2.5rem] shadow-sm">
+                  <div className="p-6 bg-gray-50 rounded-2xl mb-4 text-gray-300">
+                    <ImageIcon size={48} />
                   </div>
-                )}
-              </motion.div>
-            ) : (
-              <div className="w-full h-full min-h-[500px] flex flex-col items-center justify-center text-center p-12 border-4 border-dashed border-gray-50 rounded-[3rem]">
-                <div className="p-8 bg-gray-50 rounded-full mb-6 text-gray-200">
-                  <ImageIcon size={64} />
+                  <h3 className="text-2xl font-black text-gray-400">Scanner Idle</h3>
+                  <p className="text-gray-400 mt-1 text-sm max-w-[250px]">Upload an MRI scan to begin neural processing.</p>
                 </div>
-                <h3 className="text-3xl font-black text-gray-300 tracking-tight">System Idle</h3>
-                <p className="text-gray-400 mt-2 text-lg max-w-sm">Please provide an MRI scan to initialize the CNN inference engine.</p>
-              </div>
-            )}
-          </AnimatePresence>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>

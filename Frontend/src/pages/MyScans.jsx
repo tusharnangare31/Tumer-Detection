@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ClipboardList, AlertCircle, Eye, Search, ExternalLink, Calendar, User } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { ClipboardList, AlertCircle, Search, ExternalLink, Calendar, FileText, X, Brain, Shield } from "lucide-react";
 
 export default function MyScans() {
   const [scans, setScans] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const [selectedScan, setSelectedScan] = useState(null);
+  
+  // 1. New State for Search
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     fetchScans();
@@ -16,12 +18,10 @@ export default function MyScans() {
   const fetchScans = async () => {
     const token = localStorage.getItem("access");
     setLoading(true);
-
     try {
       const res = await fetch("http://127.0.0.1:8000/api/patients/my-scans/", {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error("Failed to load scans");
       setScans(data);
@@ -32,156 +32,213 @@ export default function MyScans() {
     }
   };
 
-  const tumorBadge = (tumor) => {
-    const base = "px-3 py-1 rounded-full text-xs font-black uppercase tracking-tighter shadow-sm";
-    if (tumor === "glioma") return `${base} bg-red-100 text-red-700 ring-1 ring-red-200`;
-    if (tumor === "meningioma") return `${base} bg-purple-100 text-purple-700 ring-1 ring-purple-200`;
-    if (tumor === "pituitary") return `${base} bg-amber-100 text-amber-700 ring-1 ring-amber-200`;
-    if (tumor === "notumor") return `${base} bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200`;
-    return `${base} bg-gray-100 text-gray-700 ring-1 ring-gray-200`;
+  // 2. Filter Logic
+  const filteredScans = scans.filter((s) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      s.patient_name?.toLowerCase().includes(query) ||
+      s.patient_uid?.toLowerCase().includes(query) ||
+      s.tumor_type?.toLowerCase().includes(query)
+    );
+  });
+
+  const getTumorStyle = (tumor) => {
+    const base = "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border";
+    if (tumor === "glioma") return `${base} bg-red-50 text-red-600 border-red-100`;
+    if (tumor === "meningioma") return `${base} bg-purple-50 text-purple-600 border-purple-100`;
+    if (tumor === "pituitary") return `${base} bg-amber-50 text-amber-600 border-amber-100`;
+    if (tumor === "notumor") return `${base} bg-emerald-50 text-emerald-600 border-emerald-100`;
+    return `${base} bg-gray-50 text-gray-600 border-gray-100`;
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }} 
-      animate={{ opacity: 1 }} 
-      className="w-full min-h-screen bg-white px-6 lg:px-16 py-12 font-sans"
-    >
-      {/* HEADER */}
-      <div className="w-full flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-        <div>
-          <h1 className="text-5xl font-black text-gray-900 leading-tight flex items-center gap-4">
-            <ClipboardList size={48} className="text-indigo-600" /> Analysis History
-          </h1>
-          <p className="text-xl text-gray-500 mt-2 font-medium">Review your historical CNN predictions and patient scans.</p>
-        </div>
-        
-        <div className="flex bg-gray-100 rounded-2xl p-2 items-center px-4 w-full md:w-80">
-          <Search className="text-gray-400" size={20} />
-          <input 
-            type="text" 
-            placeholder="Search scans..." 
-            className="bg-transparent border-none outline-none p-2 w-full text-gray-700 font-medium" 
-          />
-        </div>
-      </div>
+    <div className="w-full min-h-screen bg-gray-50 flex flex-col items-center py-10 px-6 font-sans overflow-x-hidden">
+      
+      {/* REPORT MODAL */}
+      <AnimatePresence>
+        {selectedScan && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setSelectedScan(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 flex justify-between items-center text-white">
+                <div className="flex items-center gap-3">
+                  <Brain className="text-blue-200" />
+                  <div>
+                    <h3 className="text-lg font-bold">AI Clinical Analysis</h3>
+                    <p className="text-blue-200 text-xs">Patient ID: {selectedScan.patient_uid}</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedScan(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
 
-      {error && (
-        <div className="w-full mb-8 p-6 bg-red-50 border border-red-100 text-red-700 rounded-[2rem] flex items-center gap-3">
-          <AlertCircle size={24} /> 
-          <span className="font-bold text-lg">{error}</span>
-        </div>
-      )}
-
-      {/* DATA TABLE CONTAINER */}
-      <div className="w-full bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-10 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">MRI Scan</th>
-                <th className="px-10 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">Patient Details</th>
-                <th className="px-10 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">AI Diagnosis</th>
-                <th className="px-10 py-6 text-sm font-black text-gray-400 uppercase tracking-widest">Analysis Date</th>
-                <th className="px-10 py-6 text-sm font-black text-gray-400 uppercase tracking-widest text-right">Link</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-gray-50">
-              {loading ? (
-                [...Array(5)].map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan="5" className="px-10 py-10"><div className="h-8 bg-gray-100 rounded-full w-full"></div></td>
-                  </tr>
-                ))
-              ) : scans.length > 0 ? (
-                scans.map((s) => (
-                  <tr key={s.id} className="group hover:bg-indigo-50/30 transition-all duration-300">
-                    {/* THUMBNAIL */}
-                    <td className="px-10 py-6">
-                      <div className="w-20 h-20 rounded-2xl overflow-hidden border border-gray-100 shadow-inner">
-                        <img 
-                          src={s.mri_image_url} 
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-                          alt="Scan" 
-                        />
-                      </div>
-                    </td>
-
-                    {/* PATIENT INFO */}
-                    <td className="px-10 py-6">
-                      <div className="flex flex-col">
-                        <span className="text-xl font-bold text-gray-900">{s.patient_name}</span>
-                        <span className="font-mono text-xs font-black text-indigo-400 tracking-tighter uppercase mt-1">
-                           #{s.patient_uid}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* AI RESULT */}
-                    <td className="px-10 py-6">
-                      <div className="flex flex-col gap-2">
-                        <span className={tumorBadge(s.tumor_type)}>
-                          {s.tumor_type === 'notumor' ? 'Healthy' : s.tumor_type}
-                        </span>
-                        {s.confidence && (
-                          <div className="flex items-center gap-2">
-                             <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                               <div 
-                                className="h-full bg-indigo-600" 
-                                style={{ width: `${s.confidence * 100}%` }}
-                               ></div>
-                             </div>
-                             <span className="text-xs font-bold text-gray-500">
-                               {(s.confidence * 100).toFixed(1)}%
-                             </span>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* DATE */}
-                    <td className="px-10 py-6 text-gray-500 font-medium">
-                      <div className="flex items-center gap-2">
-                        <Calendar size={16} className="text-gray-300" />
-                        {new Date(s.scan_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </div>
-                    </td>
-
-                    {/* ACTION */}
-                    <td className="px-10 py-6 text-right">
-                      <a
-                        href={s.mri_image_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 bg-white border border-gray-200 text-indigo-600 hover:bg-indigo-600 hover:text-white px-6 py-3 rounded-xl font-bold transition-all shadow-sm active:scale-95"
-                      >
-                        <ExternalLink size={18} />
-                        Original File
-                      </a>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="5" className="px-10 py-32 text-center">
-                    <div className="flex flex-col items-center">
-                      <div className="p-6 bg-gray-50 rounded-full mb-4">
-                        <ClipboardList className="text-gray-200" size={64} />
-                      </div>
-                      <h3 className="text-2xl font-black text-gray-300">No scans processed yet</h3>
+              <div className="p-8 max-h-[70vh] overflow-y-auto">
+                {selectedScan.clinical_reasoning ? (
+                  <div className="prose prose-sm max-w-none">
+                    <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 mb-4">
+                      <p className="font-mono text-sm whitespace-pre-wrap leading-relaxed text-indigo-900">
+                        {selectedScan.clinical_reasoning}
+                      </p>
                     </div>
-                  </td>
+                    <p className="text-xs text-gray-400 mt-4 text-center">
+                      Disclaimer: Generated by Gemini AI. For educational purposes only.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-10 text-gray-400">
+                    <Shield size={48} className="mx-auto mb-4 opacity-20" />
+                    <p>No clinical reasoning data available for this scan.</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="bg-gray-50 p-4 text-center border-t border-gray-100">
+                <button onClick={() => setSelectedScan(null)} className="text-indigo-600 font-bold text-sm hover:underline">
+                  Close Report
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="w-full max-w-6xl">
+        <div className="w-full flex flex-col md:flex-row justify-between items-end mb-10 gap-6 px-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-indigo-600 rounded-lg text-white">
+                <ClipboardList size={20} />
+              </div>
+              <span className="text-xs font-black text-indigo-600 uppercase tracking-widest">Database</span>
+            </div>
+            <h1 className="text-4xl lg:text-5xl font-black text-gray-900 leading-tight tracking-tighter">
+              Scan History
+            </h1>
+          </div>
+
+          {/* 3. Connected Search Input */}
+          <div className="flex bg-white border border-gray-200 rounded-xl p-1.5 items-center px-4 w-full md:w-72 shadow-sm focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+            <Search className="text-gray-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Search ID, Name, Tumor..." 
+              className="bg-transparent border-none outline-none p-2 w-full text-sm text-gray-700 font-medium"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)} // Update state on type
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mx-4 mb-6 p-4 bg-red-50 border border-red-100 text-red-700 rounded-2xl flex items-center gap-3 text-sm font-bold">
+            <AlertCircle size={18} /> {error}
+          </motion.div>
+        )}
+
+        <div className="w-full bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/50 border-b border-gray-100">
+                  <th className="px-8 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Patient / Scan</th>
+                  <th className="px-8 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Diagnosis</th>
+                  <th className="px-8 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Date</th>
+                  <th className="px-8 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              
+              {/* 4. Render 'filteredScans' instead of 'scans' */}
+              <tbody className="divide-y divide-gray-50">
+                {loading ? (
+                  [...Array(3)].map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan="4" className="px-8 py-8"><div className="h-12 bg-gray-50 rounded-xl w-full"></div></td>
+                    </tr>
+                  ))
+                ) : filteredScans.length > 0 ? (
+                  filteredScans.map((s) => (
+                    <tr key={s.id} className="group hover:bg-indigo-50/30 transition-all">
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-4">
+                          <div className="w-14 h-14 rounded-xl overflow-hidden border border-gray-100 bg-gray-50 flex-shrink-0">
+                            <img src={s.mri_image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="MRI" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-base font-black text-gray-900">{s.patient_name}</span>
+                            <span className="text-[10px] font-bold text-indigo-400 uppercase">UID: {s.patient_uid}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex flex-col gap-2 items-start">
+                          <span className={getTumorStyle(s.tumor_type)}>
+                            {s.tumor_type === 'notumor' ? 'Healthy' : s.tumor_type}
+                          </span>
+                          <div className="flex items-center gap-2 w-full max-w-[120px]">
+                             <div className="h-1.5 flex-1 bg-gray-100 rounded-full overflow-hidden">
+                               <div className="h-full bg-indigo-500" style={{ width: `${s.confidence * 100}%` }}></div>
+                             </div>
+                             <span className="text-[10px] font-bold text-gray-400">{(s.confidence * 100).toFixed(0)}%</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-2 text-gray-500 text-sm font-bold">
+                          <Calendar size={14} className="text-gray-300" />
+                          {new Date(s.scan_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </div>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <button 
+                            onClick={() => setSelectedScan(s)}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-xs uppercase tracking-wider transition-colors"
+                          >
+                            <FileText size={14} /> Report
+                          </button>
+                          <a 
+                            href={s.mri_image_url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                          >
+                            <ExternalLink size={16} />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="px-8 py-24 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <Search className="w-12 h-12 text-gray-200 mb-4" />
+                        <h3 className="text-xl font-black text-gray-300 uppercase tracking-widest">
+                          {searchQuery ? "No Matches Found" : "No Scans Found"}
+                        </h3>
+                        {searchQuery && <p className="text-gray-400 text-sm mt-2">Try a different name or ID</p>}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      <footer className="py-12 text-center text-gray-400 font-medium text-sm">
-        © 2026 TumorDetect AI Intelligence Suite • Full Width Diagnostic History
-      </footer>
-    </motion.div>
+    </div>
   );
 }

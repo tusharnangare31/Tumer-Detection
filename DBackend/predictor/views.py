@@ -2,22 +2,28 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .utils import predict_image
 
+from django.http import JsonResponse
+from .utils import predict_image
+from .services import generate_clinical_reasoning
+
 @csrf_exempt
 def predict(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST method allowed"}, status=405)
+    if request.method == "POST":
+        file = request.FILES.get("file")
+        age = request.POST.get("age", "Unknown")
+        gender = request.POST.get("gender", "Unknown")
 
-    if "file" not in request.FILES:
-        return JsonResponse({"error": "No file uploaded"}, status=400)
+        try:
+            # 1. CNN Model Detection
+            label, confidence = predict_image(file)
 
-    file = request.FILES["file"]
+            # 2. Gemini Clinical Interpretation
+            reasoning = generate_clinical_reasoning(label, confidence, age, gender)
 
-    try:
-        label, confidence = predict_image(file)
-        return JsonResponse({
-            "prediction": label,
-            "confidence": confidence
-        })
-    except Exception as e:
-        print("Prediction error:", e)
-        return JsonResponse({"error": "Prediction failed"}, status=500)
+            return JsonResponse({
+                "prediction": label,
+                "confidence": confidence,
+                "clinical_reasoning": reasoning
+            })
+        except Exception as e:
+            return JsonResponse({"error": "Analysis failed"}, status=500)

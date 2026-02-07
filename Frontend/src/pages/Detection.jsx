@@ -17,6 +17,8 @@ import {
   Brain,
   Shield,
   TrendingUp,
+  Sparkles, // Added for AI icon
+  FileText, // Added for Protocol icon
 } from "lucide-react";
 
 export default function Detection() {
@@ -32,15 +34,12 @@ export default function Detection() {
 
   const [scanDate, setScanDate] = useState("");
   const [file, setFile] = useState(null);
-
   const [dragActive, setDragActive] = useState(false);
-
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  // ✅ Preview local image (before upload)
   const previewUrl = useMemo(() => {
     if (!file) return null;
     return URL.createObjectURL(file);
@@ -52,9 +51,12 @@ export default function Detection() {
     };
   }, [previewUrl]);
 
-    // 🔍 Fetch patient by UID
+  // Fetch patient logic
   useEffect(() => {
-    if (!patient.patient_uid.trim()) return;
+    if (!patient.patient_uid.trim()) {
+      setPatientId(null);
+      return;
+    }
 
     const token = localStorage.getItem("access");
     if (!token) return;
@@ -64,14 +66,12 @@ export default function Detection() {
         const res = await fetch(
           `http://127.0.0.1:8000/api/patients/by-uid/${patient.patient_uid}/`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
           }
         );
 
-        // ✅ If NOT FOUND → allow NEW patient (clear fields silently)
         if (res.status === 404) {
+          setPatientId(null);
           setPatient((prev) => ({
             ...prev,
             full_name: "",
@@ -86,8 +86,7 @@ export default function Detection() {
         if (!res.ok) return;
 
         const data = await res.json();
-
-        // ✅ Existing patient → auto-fill
+        setPatientId(data.id);
         setPatient((prev) => ({
           ...prev,
           full_name: data.full_name || "",
@@ -96,13 +95,13 @@ export default function Detection() {
           phone: data.phone || "",
           address: data.address || "",
         }));
-      } catch {}
+      } catch (err) {
+        console.error("Search error:", err);
+      }
     }, 600);
 
     return () => clearTimeout(delay);
   }, [patient.patient_uid]);
-
-
 
   const handlePatientChange = (e) => {
     const { name, value } = e.target;
@@ -112,11 +111,10 @@ export default function Detection() {
 
   const validate = () => {
     if (!patient.patient_uid.trim()) return "Patient UID is required";
-    if (!patientId) return "Patient not found";
+    if (!patientId) return "This Patient UID is not registered.";
     if (!file) return "MRI image is required";
     return null;
   };
-
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -128,7 +126,6 @@ export default function Detection() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       setFile(e.dataTransfer.files[0]);
       setResult(null);
@@ -137,6 +134,7 @@ export default function Detection() {
   };
 
   const resetAll = () => {
+    setPatientId(null);
     setPatient({
       patient_uid: "",
       full_name: "",
@@ -173,26 +171,20 @@ export default function Detection() {
 
     const token = localStorage.getItem("access");
     if (!token) {
-      setFormError("You are not logged in. Please login again.");
+      setFormError("You are not logged in.");
       return;
     }
 
     try {
       setLoading(true);
-
       const formData = new FormData();
       formData.append("file", file);
-
       formData.append("patient_id", patientId);
-
-
       if (scanDate) formData.append("scan_date", scanDate);
 
       const res = await fetch("http://127.0.0.1:8000/api/patients/upload-scan/", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
@@ -202,8 +194,6 @@ export default function Detection() {
         setFormError(data?.error || "Upload failed");
         return;
       }
-
-      // ✅ Use backend output
       setResult(data);
     } catch (err) {
       setFormError("Server not reachable");
@@ -214,22 +204,21 @@ export default function Detection() {
 
   const PredictionBadge = ({ tumor_type }) => {
     const isTumor = tumor_type && tumor_type !== "notumor";
-    
     return (
       <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm ${
         isTumor 
-          ? "bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/30" 
-          : "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-green-500/30"
+          ? "bg-red-100 text-red-700 border border-red-200" 
+          : "bg-emerald-100 text-emerald-700 border border-emerald-200"
       }`}>
         {isTumor ? (
           <>
             <AlertCircle className="w-4 h-4" />
-            <span>Tumor Detected: {tumor_type.toUpperCase()}</span>
+            <span>{tumor_type.toUpperCase()} DETECTED</span>
           </>
         ) : (
           <>
             <Shield className="w-4 h-4" />
-            <span>No Tumor Detected</span>
+            <span>NO TUMOR DETECTED</span>
           </>
         )}
       </div>
@@ -237,7 +226,7 @@ export default function Detection() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-sans">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -250,11 +239,11 @@ export default function Detection() {
               <Brain className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-bold text-gray-900">
                 Technician Dashboard
               </h1>
               <p className="text-gray-600 text-sm mt-1">
-                AI-powered brain tumor detection and patient management system
+                AI-powered brain tumor detection and clinical context engine
               </p>
             </div>
           </div>
@@ -274,10 +263,7 @@ export default function Detection() {
                 <p className="font-semibold text-sm">Error</p>
                 <p className="text-sm">{formError}</p>
               </div>
-              <button
-                onClick={() => setFormError("")}
-                className="text-red-400 hover:text-red-600"
-              >
+              <button onClick={() => setFormError("")} className="text-red-400 hover:text-red-600">
                 <X className="w-5 h-5" />
               </button>
             </motion.div>
@@ -286,385 +272,195 @@ export default function Detection() {
 
         {/* MAIN GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Patient Form */}
+          {/* LEFT: Patient Form */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
             className="lg:col-span-1"
           >
-            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-6 sticky top-6">
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sticky top-6">
               <div className="flex items-center gap-2 mb-6">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Activity className="w-5 h-5 text-blue-600" />
+                <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                  <Activity className="w-4 h-4 text-blue-600" />
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900">Patient Information</h2>
+                <h2 className="text-lg font-bold text-gray-900">Patient Details</h2>
               </div>
 
               <div className="space-y-4">
-                {/* UID */}
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                    Patient UID *
-                  </label>
-                  <div className="relative mt-2">
-                    <User className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                    <input
-                      name="patient_uid"
-                      value={patient.patient_uid}
-                      onChange={handlePatientChange}
-                      placeholder="Ex: P001"
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Name */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                    Full Name *
-                  </label>
-                  <div className="relative mt-2">
-                    <User className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                    <input
-                      name="full_name"
-                      value={patient.full_name}
-                      onChange={handlePatientChange}
-                      placeholder="Patient full name"
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Age + Gender */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                      Age *
-                    </label>
-                    <div className="relative mt-2">
-                      <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                      <input
-                        type="number"
-                        name="age"
-                        value={patient.age}
-                        onChange={handlePatientChange}
-                        placeholder="Age"
-                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                      Gender *
-                    </label>
-                    <select
-                      name="gender"
-                      value={patient.gender}
-                      onChange={handlePatientChange}
-                      className="w-full mt-2 py-2.5 px-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                    Phone (Optional)
-                  </label>
-                  <div className="relative mt-2">
-                    <Phone className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                    <input
-                      name="phone"
-                      value={patient.phone}
-                      onChange={handlePatientChange}
-                      placeholder="+1 (555) 000-0000"
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Address */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                    Address (Optional)
-                  </label>
-                  <div className="relative mt-2">
-                    <MapPin className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                    <input
-                      name="address"
-                      value={patient.address}
-                      onChange={handlePatientChange}
-                      placeholder="Street address"
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Scan Date */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                    Scan Date (Optional)
-                  </label>
+                  <label className="text-xs font-bold text-gray-500 uppercase">Patient UID *</label>
                   <input
-                    type="datetime-local"
-                    value={scanDate}
-                    onChange={(e) => setScanDate(e.target.value)}
-                    className="w-full mt-2 py-2.5 px-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+                    name="patient_uid"
+                    value={patient.patient_uid}
+                    onChange={handlePatientChange}
+                    placeholder="Ex: P001"
+                    className="w-full mt-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-gray-50 focus:bg-white"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase">Full Name</label>
+                  <input
+                    name="full_name"
+                    value={patient.full_name}
+                    readOnly
+                    className="w-full mt-1 px-4 py-2 border border-gray-200 rounded-xl bg-gray-100 text-gray-500 cursor-not-allowed"
                   />
                 </div>
 
-                <button
-                  onClick={resetAll}
-                  className="w-full border border-gray-300 hover:bg-gray-100 py-2.5 rounded-xl font-medium transition-all text-gray-700 hover:border-gray-400"
-                >
-                  Clear Form
-                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Age</label>
+                    <input name="age" value={patient.age} readOnly className="w-full mt-1 px-4 py-2 border border-gray-200 rounded-xl bg-gray-100 text-gray-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Gender</label>
+                    <input name="gender" value={patient.gender} readOnly className="w-full mt-1 px-4 py-2 border border-gray-200 rounded-xl bg-gray-100 text-gray-500" />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100">
+                  <button onClick={resetAll} className="w-full text-sm text-gray-500 hover:text-gray-700 font-medium">Reset Form</button>
+                </div>
               </div>
             </div>
           </motion.div>
 
-          {/* Upload + Result */}
+          {/* RIGHT: Upload + Results */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Upload box */}
+            
+            {/* Upload Area */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-6"
-              onDragEnter={handleDrag}
-              onDragOver={handleDrag}
-              onDragLeave={handleDrag}
-              onDrop={handleDrop}
+              className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6"
+              onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
             >
               <div className="flex items-center gap-2 mb-6">
-                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                  <FileImage className="w-5 h-5 text-indigo-600" />
+                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <UploadCloud className="w-4 h-4 text-indigo-600" />
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900">MRI Upload & Analysis</h2>
+                <h2 className="text-lg font-bold text-gray-900">Upload Scan</h2>
               </div>
 
-              <div
-                className={`relative border-2 border-dashed rounded-2xl p-10 text-center transition-all ${
-                  dragActive
-                    ? "border-blue-500 bg-blue-50/50 scale-[1.02]"
-                    : "border-gray-300 bg-gradient-to-br from-gray-50 to-white"
-                }`}
-              >
-                <div className="relative z-10">
-                  <div className={`w-16 h-16 mx-auto mb-4 bg-gradient-to-br rounded-2xl flex items-center justify-center shadow-lg transition-all ${
-                    dragActive
-                      ? "from-blue-500 to-indigo-600 scale-110"
-                      : "from-blue-400 to-indigo-500"
-                  }`}>
-                    <UploadCloud className="w-8 h-8 text-white" />
-                  </div>
-                  <p className="text-gray-800 font-semibold text-lg">
-                    {dragActive ? "Drop your MRI scan here" : "Upload MRI Scan"}
-                  </p>
-                  <p className="text-gray-500 text-sm mt-1">
-                    Drag and drop or click to browse
-                  </p>
-                  <p className="text-gray-400 text-xs mt-2">
-                    Supports: JPG, PNG, DICOM • Max size: 10MB
-                  </p>
-
-                  <div className="mt-6">
-                    <label className="inline-block">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          setFile(e.target.files?.[0] || null);
-                          setResult(null);
-                          setFormError("");
-                        }}
-                      />
-                      <span className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium cursor-pointer inline-flex items-center gap-2 shadow-lg transition-all hover:scale-105">
-                        <FileImage className="w-4 h-4" />
-                        Select File
-                      </span>
-                    </label>
-                  </div>
-
-                  {file && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="mt-6 p-3 bg-blue-50 border border-blue-200 rounded-xl inline-flex items-center gap-2"
-                    >
-                      <CheckCircle className="w-4 h-4 text-blue-600" />
-                      <p className="text-sm text-blue-900 font-medium">
-                        {file.name}
-                      </p>
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-
-              {/* Local Preview */}
-              <AnimatePresence>
-                {previewUrl && !result?.mri_image_url && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-6 overflow-hidden"
-                  >
-                    <div className="border-2 border-gray-200 rounded-2xl p-4 bg-white">
-                      <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                        <FileImage className="w-4 h-4" />
-                        Preview
-                      </p>
-                      <div className="relative rounded-xl overflow-hidden bg-black/5">
-                        <img
-                          src={previewUrl}
-                          alt="MRI Preview"
-                          className="w-full max-h-[340px] object-contain"
-                        />
+              <div className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${dragActive ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}>
+                <input type="file" accept="image/*" className="hidden" id="fileUpload" onChange={(e) => { setFile(e.target.files?.[0] || null); setResult(null); }} />
+                
+                {!file ? (
+                  <label htmlFor="fileUpload" className="cursor-pointer flex flex-col items-center">
+                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                      <FileImage className="w-8 h-8 text-blue-500" />
+                    </div>
+                    <span className="text-lg font-bold text-gray-900">Click to Upload MRI</span>
+                    <span className="text-sm text-gray-400 mt-1">or drag and drop file here</span>
+                  </label>
+                ) : (
+                  <div className="flex items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                        <FileImage className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-gray-900 text-sm">{file.name}</p>
+                        <p className="text-xs text-blue-600">Ready to analyze</p>
                       </div>
                     </div>
-                  </motion.div>
+                    <button onClick={() => setFile(null)} className="p-2 hover:bg-white rounded-lg text-gray-500"><X size={18}/></button>
+                  </div>
                 )}
-              </AnimatePresence>
+              </div>
+
+              {previewUrl && !result && (
+                 <div className="mt-4 rounded-xl overflow-hidden border border-gray-200 max-h-[300px] bg-black">
+                   <img src={previewUrl} className="w-full h-full object-contain opacity-80" alt="Preview" />
+                 </div>
+              )}
 
               <button
                 onClick={handleSubmit}
-                disabled={loading}
-                className={`w-full mt-6 py-4 rounded-xl text-white font-semibold transition-all shadow-lg ${
-                  loading
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:scale-[1.02] hover:shadow-xl"
-                }`}
+                disabled={!file || loading}
+                className="w-full mt-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white rounded-xl font-bold text-lg shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="animate-spin" size={20} />
-                    Analyzing MRI Scan...
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <Brain className="w-5 h-5" />
-                    Start AI Analysis
-                  </span>
-                )}
+                {loading ? <Loader2 className="animate-spin" /> : <Brain />}
+                {loading ? "Processing..." : "Run AI Diagnostics"}
               </button>
             </motion.div>
 
-            {/* Result */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-6"
-            >
-              <div className="flex items-center gap-2 mb-6">
-                <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                </div>
-                <h2 className="text-lg font-semibold text-gray-900">AI Prediction Report</h2>
-              </div>
-
-              {!result ? (
-                <div className="text-center py-12">
-                  <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center">
-                    <Brain className="w-10 h-10 text-gray-400" />
-                  </div>
-                  <p className="text-gray-500 font-medium">No analysis results yet</p>
-                  <p className="text-gray-400 text-sm mt-1">Upload an MRI scan to get started</p>
-                </div>
-              ) : (
+            {/* RESULTS SECTION */}
+            <AnimatePresence mode="wait">
+              {result && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-6"
                 >
-                  {/* Prediction Card */}
-                  <div className="p-6 border-2 border-gray-200 rounded-2xl bg-gradient-to-br from-white to-gray-50">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                      <PredictionBadge tumor_type={result.tumor_type} />
-                      
-                      <div className="flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200">
-                          <TrendingUp className="w-4 h-4 text-blue-600" />
-                          <span className="text-gray-600">Confidence:</span>
-                          <span className="font-bold text-gray-900">
-                            {result.confidence !== undefined
-                              ? `${(result.confidence * 100).toFixed(1)}%`
-                              : "-"}
-                          </span>
-                        </div>
-                        
-                        <div className="px-3 py-2 bg-white rounded-lg border border-gray-200">
-                          <span className="text-gray-600 text-xs">Scan ID:</span>
-                          <span className="font-mono font-bold text-gray-900 ml-2 text-xs">
-                            {result.scan_id}
-                          </span>
-                        </div>
+                  {/* 1. Classification Result */}
+                  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">AI Classification</p>
+                        <PredictionBadge tumor_type={result.tumor_type} />
                       </div>
-                    </div>
-
-                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-amber-800 text-sm">
-                        <span className="font-semibold">Clinical Verification Required:</span> This AI prediction should be reviewed and confirmed by a qualified medical professional before making any clinical decisions.
-                      </p>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Confidence</p>
+                        <p className="text-2xl font-black text-gray-900">{(result.confidence * 100).toFixed(1)}%</p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* MRI Image */}
-                  {result.mri_image_url && (
-                    <div className="p-6 border-2 border-gray-200 rounded-2xl bg-white">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <FileImage className="w-5 h-5 text-gray-700" />
-                          <p className="font-semibold text-gray-900">Stored MRI Image</p>
+                  {/* 2. GEMINI AI PROTOCOL (NEW SECTION) */}
+                  {result.clinical_reasoning && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.2 }}
+                      className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-3xl shadow-xl shadow-indigo-200 text-white p-8 relative overflow-hidden"
+                    >
+                      {/* Decorative Background */}
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
+                      
+                      <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-6 border-b border-white/20 pb-4">
+                          <Sparkles className="w-6 h-6 text-yellow-300" />
+                          <h3 className="text-xl font-bold text-white">Recommended Treatment Protocol</h3>
                         </div>
 
-                        <button
-                          onClick={() => copyToClipboard(result.mri_image_url)}
-                          className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg border-2 border-gray-200 hover:bg-gray-50 transition-all font-medium"
-                        >
-                          {copied ? (
-                            <>
-                              <Check className="w-4 h-4 text-green-600" />
-                              <span className="text-green-600">Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Clipboard className="w-4 h-4" />
-                              <span>Copy URL</span>
-                            </>
-                          )}
+                        {/* PRESERVE FORMATTING WITH WHITESPACE-PRE-WRAP */}
+                        <div className="font-medium text-indigo-50 leading-relaxed whitespace-pre-wrap font-mono text-sm bg-black/20 p-6 rounded-2xl border border-white/10">
+                          {result.clinical_reasoning}
+                        </div>
+                        
+                        <div className="mt-4 flex items-center gap-2 text-xs text-indigo-200">
+                          <Shield className="w-3 h-3" />
+                          <span>AI Generated Context • For Educational Use Only</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* 3. Stored Image */}
+                  {result.mri_image_url && (
+                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-5 h-5 text-emerald-500" />
+                          <span className="font-bold text-gray-900">Scan Archived</span>
+                        </div>
+                        <button onClick={() => copyToClipboard(result.mri_image_url)} className="text-xs text-blue-600 font-bold hover:underline">
+                          {copied ? "COPIED" : "COPY LINK"}
                         </button>
                       </div>
-
-                      <a
-                        href={result.mri_image_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-600 hover:text-blue-700 underline text-sm break-all block mb-4"
-                      >
-                        {result.mri_image_url}
-                      </a>
-
-                      <div className="relative rounded-xl overflow-hidden bg-black/5 border-2 border-gray-200">
-                        <img
-                          src={result.mri_image_url}
-                          alt="MRI Stored"
-                          className="w-full max-h-[420px] object-contain"
-                        />
+                      <div className="bg-black rounded-xl overflow-hidden h-64 flex items-center justify-center">
+                         <img src={result.mri_image_url} className="h-full object-contain" alt="Saved Scan" />
                       </div>
                     </div>
                   )}
+
                 </motion.div>
               )}
-            </motion.div>
+            </AnimatePresence>
+
           </div>
         </div>
       </motion.div>

@@ -1,13 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  Search,
-  Filter,
-  Calendar,
-  Eye,
-  AlertCircle,
-  ClipboardList,
-} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Search, Filter, Calendar, Eye, AlertCircle, ClipboardList, X, Brain, FileText } from "lucide-react";
 
 export default function DoctorDashboard() {
   const [scans, setScans] = useState([]);
@@ -27,33 +20,22 @@ export default function DoctorDashboard() {
   const fetchScans = async () => {
     setLoading(true);
     setError("");
-
     const token = localStorage.getItem("access");
     if (!token) {
-      setError("You are not logged in. Please login again.");
+      setError("You are not logged in.");
       setLoading(false);
       return;
     }
-
     try {
-      // ✅ Doctor should see all scans
       const res = await fetch("http://127.0.0.1:8000/api/patients/scans/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       const data = await res.json();
-
       if (!res.ok) {
         setError(data?.error || "Failed to load scans");
-        setLoading(false);
         return;
       }
-
-      // backend can return { scans: [...] } or directly [...]
-      const list = Array.isArray(data) ? data : data.scans;
-      setScans(list || []);
+      setScans(Array.isArray(data) ? data : data.scans || []);
     } catch (err) {
       setError("Server not reachable");
     } finally {
@@ -67,8 +49,6 @@ export default function DoctorDashboard() {
 
   const filteredScans = useMemo(() => {
     let list = [...scans];
-
-    // Search filter (patient UID / name)
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((s) => {
@@ -77,37 +57,17 @@ export default function DoctorDashboard() {
         return uid.includes(q) || name.includes(q);
       });
     }
-
-    // Tumor filter
-    if (tumorFilter !== "ALL") {
-      list = list.filter((s) => s.tumor_type === tumorFilter);
-    }
-
-    // Status filter
-    if (statusFilter !== "ALL") {
-      list = list.filter((s) => s.status === statusFilter);
-    }
-
-    // Date range filter
+    if (tumorFilter !== "ALL") list = list.filter((s) => s.tumor_type === tumorFilter);
+    if (statusFilter !== "ALL") list = list.filter((s) => s.status === statusFilter);
     if (fromDate) {
       const from = new Date(fromDate).getTime();
-      list = list.filter((s) => {
-        const scanDate = new Date(s.scan_date || s.created_at).getTime();
-        return scanDate >= from;
-      });
+      list = list.filter((s) => new Date(s.scan_date || s.created_at).getTime() >= from);
     }
-
     if (toDate) {
       const to = new Date(toDate).getTime();
-      list = list.filter((s) => {
-        const scanDate = new Date(s.scan_date || s.created_at).getTime();
-        return scanDate <= to;
-      });
+      list = list.filter((s) => new Date(s.scan_date || s.created_at).getTime() <= to);
     }
-
-    // newest first
     list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
     return list;
   }, [scans, search, tumorFilter, statusFilter, fromDate, toDate]);
 
@@ -129,291 +89,230 @@ export default function DoctorDashboard() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-7xl mx-auto"
-    >
-      {/* HEADER */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Doctor Dashboard
-        </h1>
-        <p className="text-gray-600 mt-1">
-          View all patient MRI scans, AI predictions and clinical status.
-        </p>
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Doctor Dashboard</h1>
+        <p className="text-gray-600 mt-1">Comprehensive overview of patient diagnostics and AI analysis.</p>
       </div>
 
-      {/* ERROR */}
       {error && (
-        <div className="mb-5 p-3 bg-red-100 text-red-700 rounded-lg flex items-center">
-          <AlertCircle className="w-5 h-5 mr-2" />
-          {error}
+        <div className="mb-5 p-4 bg-red-50 text-red-700 rounded-xl flex items-center gap-3">
+          <AlertCircle size={20} />
+          <span className="font-medium">{error}</span>
         </div>
       )}
 
-      {/* FILTER BAR */}
-      <div className="bg-white rounded-2xl shadow p-5 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-5 h-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-gray-800">Filters</h2>
+      {/* FILTERS */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-8">
+        <div className="flex items-center gap-2 mb-6">
+          <Filter className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-lg font-bold text-gray-800">Filter Records</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Search */}
           <div>
-            <label className="text-sm font-medium text-gray-700">
-              Search Patient
-            </label>
+            <label className="text-xs font-bold text-gray-500 uppercase">Search</label>
             <div className="relative mt-1">
-              <Search className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
               <input
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Patient UID / Name"
+                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
+                placeholder="Name or ID..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
           </div>
-
-          {/* Tumor Type */}
           <div>
-            <label className="text-sm font-medium text-gray-700">
-              Tumor Type
-            </label>
+            <label className="text-xs font-bold text-gray-500 uppercase">Type</label>
             <select
-              className="w-full mt-1 py-2 px-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full mt-1 py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
               value={tumorFilter}
               onChange={(e) => setTumorFilter(e.target.value)}
             >
-              <option value="ALL">All</option>
+              <option value="ALL">All Types</option>
               <option value="glioma">Glioma</option>
               <option value="meningioma">Meningioma</option>
               <option value="pituitary">Pituitary</option>
               <option value="notumor">No Tumor</option>
             </select>
           </div>
-
-          {/* Status */}
           <div>
-            <label className="text-sm font-medium text-gray-700">
-              Status
-            </label>
+            <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
             <select
-              className="w-full mt-1 py-2 px-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full mt-1 py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="ALL">All</option>
+              <option value="ALL">All Status</option>
               <option value="PENDING">Pending</option>
               <option value="COMPLETED">Completed</option>
               <option value="VERIFIED">Verified</option>
             </select>
           </div>
-
-          {/* Refresh */}
-          <div className="flex items-end">
-            <button
-              onClick={fetchScans}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium"
-            >
+          <div className="flex items-end gap-2">
+            <button onClick={fetchScans} className="flex-1 bg-indigo-600 text-white py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors">
               Refresh
             </button>
-          </div>
-
-          {/* From */}
-          <div>
-            <label className="text-sm font-medium text-gray-700">
-              From Date
-            </label>
-            <div className="relative mt-1">
-              <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-              <input
-                type="datetime-local"
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* To */}
-          <div>
-            <label className="text-sm font-medium text-gray-700">
-              To Date
-            </label>
-            <div className="relative mt-1">
-              <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-              <input
-                type="datetime-local"
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Reset */}
-          <div className="flex items-end">
-            <button
-              onClick={() => {
-                setSearch("");
-                setTumorFilter("ALL");
-                setStatusFilter("ALL");
-                setFromDate("");
-                setToDate("");
-              }}
-              className="w-full border border-gray-300 hover:bg-gray-50 py-2 rounded-lg font-medium"
+            <button 
+              onClick={() => { setSearch(""); setTumorFilter("ALL"); setStatusFilter("ALL"); setFromDate(""); setToDate(""); }}
+              className="flex-1 bg-gray-100 text-gray-600 py-2 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors"
             >
-              Reset Filters
+              Reset
             </button>
           </div>
         </div>
       </div>
 
       {/* TABLE */}
-      <div className="bg-white rounded-2xl shadow p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-800">
-              MRI Scan Records
-            </h2>
+            <ClipboardList className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-lg font-bold text-gray-800">Scan Registry</h2>
           </div>
-          <p className="text-sm text-gray-500">
-            Showing: <b>{filteredScans.length}</b>
-          </p>
+          <span className="text-xs font-bold bg-gray-100 text-gray-500 px-3 py-1 rounded-full">{filteredScans.length} Records</span>
         </div>
 
-        {loading ? (
-          <div className="text-gray-500">Loading scans...</div>
-        ) : filteredScans.length === 0 ? (
-          <div className="text-gray-500">No records found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b">
-                  <th className="py-3 px-2">Patient UID</th>
-                  <th className="py-3 px-2">Patient Name</th>
-                  <th className="py-3 px-2">Tumor Type</th>
-                  <th className="py-3 px-2">Confidence</th>
-                  <th className="py-3 px-2">Status</th>
-                  <th className="py-3 px-2">Uploaded By</th>
-                  <th className="py-3 px-2">Scan Date</th>
-                  <th className="py-3 px-2">Action</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-gray-50/50">
+              <tr>
+                <th className="py-4 px-6 font-bold text-gray-400 uppercase text-xs">Patient</th>
+                <th className="py-4 px-6 font-bold text-gray-400 uppercase text-xs">Diagnosis</th>
+                <th className="py-4 px-6 font-bold text-gray-400 uppercase text-xs">Confidence</th>
+                <th className="py-4 px-6 font-bold text-gray-400 uppercase text-xs">Date</th>
+                <th className="py-4 px-6 font-bold text-gray-400 uppercase text-xs text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filteredScans.map((scan) => (
+                <tr key={scan.id} className="hover:bg-indigo-50/10 transition-colors group">
+                  <td className="py-4 px-6">
+                    <div>
+                      <p className="font-bold text-gray-900">{scan.patient?.full_name}</p>
+                      <p className="text-xs text-gray-500 font-mono">{scan.patient?.patient_uid}</p>
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <span className={tumorBadge(scan.tumor_type)}>{scan.tumor_type}</span>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500" style={{ width: `${scan.confidence * 100}%` }}></div>
+                      </div>
+                      <span className="text-xs font-bold text-gray-600">{(scan.confidence * 100).toFixed(0)}%</span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-6 text-gray-500 font-medium">
+                    {new Date(scan.scan_date || scan.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="py-4 px-6 text-right">
+                    <button 
+                      onClick={() => setSelectedScan(scan)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-indigo-600 font-bold text-xs hover:bg-indigo-50 hover:border-indigo-100 transition-all shadow-sm"
+                    >
+                      <Eye size={14} /> Review
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-
-              <tbody>
-                {filteredScans.map((scan) => (
-                  <tr key={scan.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-2 font-medium">
-                      {scan.patient?.patient_uid}
-                    </td>
-                    <td className="py-3 px-2">{scan.patient?.full_name}</td>
-                    <td className="py-3 px-2">
-                      <span className={tumorBadge(scan.tumor_type)}>
-                        {scan.tumor_type}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2">
-                      {scan.confidence !== undefined ? Number(scan.confidence).toFixed(4) : "-"}
-                    </td>
-                    <td className="py-3 px-2">
-                      <span className={statusBadge(scan.status)}>
-                        {scan.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2">{scan.uploaded_by_username || "-"}</td>
-                    <td className="py-3 px-2">
-                      {scan.scan_date
-                        ? new Date(scan.scan_date).toLocaleString()
-                        : new Date(scan.created_at).toLocaleString()}
-                    </td>
-                    <td className="py-3 px-2">
-                      <button
-                        className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
-                        onClick={() => setSelectedScan(scan)}
-                      >
-                        <Eye className="w-4 h-4" />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* MODAL */}
-      {selectedScan && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-lg p-6 relative">
-            <button
-              className="absolute top-3 right-4 text-gray-500 hover:text-gray-800 text-xl"
-              onClick={() => setSelectedScan(null)}
+      {/* --- CLINICAL REVIEW MODAL --- */}
+      <AnimatePresence>
+        {selectedScan && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setSelectedScan(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white w-full max-w-5xl h-[85vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row relative"
+              onClick={e => e.stopPropagation()}
             >
-              ✕
-            </button>
+              {/* Close Button */}
+              <button 
+                onClick={() => setSelectedScan(null)}
+                className="absolute top-4 right-4 z-20 p-2 bg-white/20 hover:bg-white/40 backdrop-blur-md rounded-full text-white transition-colors"
+              >
+                <X size={24} />
+              </button>
 
-            <h3 className="text-xl font-bold text-gray-900 mb-2">
-              Scan Details
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div className="p-4 border rounded-xl">
-                <p className="text-sm text-gray-500">Patient UID</p>
-                <p className="font-semibold">{selectedScan.patient?.patient_uid}</p>
-              </div>
-
-              <div className="p-4 border rounded-xl">
-                <p className="text-sm text-gray-500">Patient Name</p>
-                <p className="font-semibold">{selectedScan.patient?.full_name}</p>
-              </div>
-
-              <div className="p-4 border rounded-xl">
-                <p className="text-sm text-gray-500">Tumor Type</p>
-                <p className="font-semibold uppercase">{selectedScan.tumor_type}</p>
-              </div>
-
-              <div className="p-4 border rounded-xl">
-                <p className="text-sm text-gray-500">Confidence</p>
-                <p className="font-semibold">
-                  {selectedScan.confidence !== undefined
-                    ? Number(selectedScan.confidence).toFixed(4)
-                    : "-"}
-                </p>
-              </div>
-            </div>
-
-            {/* MRI Image */}
-            {selectedScan.mri_image_url && (
-              <div className="mt-5">
-                <p className="font-medium text-gray-800 mb-2">MRI Image</p>
-                <a
-                  href={selectedScan.mri_image_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-600 underline text-sm break-all"
-                >
-                  {selectedScan.mri_image_url}
-                </a>
-
-                <div className="mt-3">
-                  <img
-                    src={selectedScan.mri_image_url}
-                    alt="MRI Scan"
-                    className="w-full max-h-[420px] object-contain border rounded-xl"
-                  />
+              {/* LEFT: IMAGE VIEWER */}
+              <div className="md:w-5/12 bg-gray-900 relative flex items-center justify-center p-8">
+                <img 
+                  src={selectedScan.mri_image_url} 
+                  alt="MRI Scan" 
+                  className="w-full h-auto max-h-[60vh] object-contain rounded-xl shadow-2xl"
+                />
+                <div className="absolute bottom-6 left-6 text-white/80 text-xs font-mono">
+                  SCAN ID: {selectedScan.id} <br/>
+                  DATE: {new Date(selectedScan.scan_date).toLocaleDateString()}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      )}
+
+              {/* RIGHT: CLINICAL DATA */}
+              <div className="md:w-7/12 flex flex-col h-full bg-white">
+                <div className="p-8 border-b border-gray-100">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold">
+                      {selectedScan.patient?.full_name?.charAt(0)}
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-gray-900 leading-none">{selectedScan.patient?.full_name}</h2>
+                      <p className="text-xs font-bold text-gray-400 tracking-widest mt-1">UID: {selectedScan.patient?.patient_uid}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                  {/* AI Classification */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">AI Prediction</p>
+                      <p className={`text-xl font-black ${selectedScan.tumor_type === 'notumor' ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {selectedScan.tumor_type.toUpperCase()}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Model Confidence</p>
+                      <p className="text-xl font-black text-indigo-600">{(selectedScan.confidence * 100).toFixed(2)}%</p>
+                    </div>
+                  </div>
+
+                  {/* Gemini Report */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Brain className="w-5 h-5 text-indigo-600" />
+                      <h3 className="font-bold text-gray-900">AI Clinical Reasoning</h3>
+                    </div>
+                    {selectedScan.clinical_reasoning ? (
+                      <div className="p-6 bg-indigo-50/50 rounded-2xl border border-indigo-100 text-sm leading-relaxed text-indigo-900 font-medium whitespace-pre-wrap">
+                        {selectedScan.clinical_reasoning}
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 text-center text-gray-400 italic">
+                        No clinical reasoning data generated for this scan.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-100 bg-gray-50">
+                   <button className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm uppercase tracking-widest shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2">
+                     <FileText size={18} /> Generate Official Report PDF
+                   </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

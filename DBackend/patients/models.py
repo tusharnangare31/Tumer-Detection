@@ -3,16 +3,13 @@ from django.contrib.auth.models import User
 
 
 class Patient(models.Model):
-    patient_uid = models.CharField(max_length=30, unique=True)  # Unique patient ID
+    patient_uid = models.CharField(max_length=30, unique=True)
     full_name = models.CharField(max_length=150)
     age = models.PositiveIntegerField()
-    gender = models.CharField(max_length=10)  # Male/Female/Other
+    gender = models.CharField(max_length=10)
     phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
-
-    # ✅ Patient profile photo URL (Cloudinary)
     profile_photo_url = models.URLField(max_length=500, blank=True, null=True)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -26,6 +23,7 @@ class MRIScan(models.Model):
         ("VERIFIED", "Verified"),
     )
 
+    # Note: These choices are for the dropdowns, but the model can store other strings if needed
     TUMOR_CHOICES = (
         ("glioma", "Glioma"),
         ("meningioma", "Meningioma"),
@@ -34,18 +32,18 @@ class MRIScan(models.Model):
     )
 
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="scans")
-
-    # Technician uploads scan (relation with USER)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="uploaded_scans")
-
-    # ✅ MRI scan stored in Cloudinary (link only)
+    
     mri_image_url = models.URLField(max_length=500, blank=True, null=True)
-
     tumor_type = models.CharField(max_length=20, choices=TUMOR_CHOICES)
     confidence = models.FloatField()
 
+    # ✅ NEW FIELD: Stores Gemini's AI Explanation
+    # We use TextField because the reasoning can be several paragraphs long
+    clinical_reasoning = models.TextField(blank=True, null=True)
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
-    scan_date = models.DateTimeField()  # scan performed date/time
+    scan_date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -54,10 +52,7 @@ class MRIScan(models.Model):
 
 class DoctorReview(models.Model):
     scan = models.ForeignKey(MRIScan, on_delete=models.CASCADE, related_name="doctor_reviews")
-
-    # Doctor user relation
     doctor = models.ForeignKey(User, on_delete=models.CASCADE, related_name="doctor_reviews")
-
     comments = models.TextField(blank=True, null=True)
     final_diagnosis = models.CharField(max_length=200, blank=True, null=True)
     verified = models.BooleanField(default=False)
@@ -69,10 +64,7 @@ class DoctorReview(models.Model):
 
 class Report(models.Model):
     scan = models.OneToOneField(MRIScan, on_delete=models.CASCADE, related_name="report")
-
-    # ✅ Report file stored in Cloudinary (or any cloud drive)
     report_pdf_url = models.URLField(max_length=500, blank=True, null=True)
-
     generated_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
