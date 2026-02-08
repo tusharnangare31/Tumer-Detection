@@ -3,6 +3,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
 from django.db.models import Count
+from django.http import HttpResponse
+from django.template.loader import get_template
+
+from xhtml2pdf import pisa
 
 from cloudinary.uploader import upload as cloudinary_upload
 
@@ -11,6 +15,7 @@ from predictor.utils import predict_image
 
 # ✅ CRITICAL IMPORT: This connects your View to the Gemini Service
 from predictor.services import generate_clinical_reasoning 
+from predictor.services import generate_official_report_text
 
 
 # =========================================================
@@ -251,3 +256,53 @@ def doctor_registry(request):
         return Response(data, status=200)
     except Exception as e:
         return Response({"error": "Internal Server Error", "details": str(e)}, status=500)
+    
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def generate_report_pdf(request, scan_id):
+    try:
+        scan = MRIScan.objects.get(id=scan_id)
+        
+        # 1. GENERATE FRESH CONTENT
+        # We ignore the database 'clinical_reasoning' and generate a new, official report.
+        print(f"Generating fresh official report for Scan #{scan.id}...")
+        
+        official_report_text = generate_official_report_text(
+            scan.tumor_type, 
+            scan.confidence, 
+            scan.patient.age, 
+            scan.patient.gender
+        )
+
+        # 2. PREPARE CONTEXT
+        # We pass 'generated_text' to the template
+        context = {
+            "scan": scan,
+            "confidence_percent": round(scan.confidence * 100, 2),
+            "generated_text": official_report_text, # <--- The new formal text
+            "date": timezone.now()
+        }
+        
+        # 3. RENDER PDF
+        # This path works because we created patients/templates/patients/report.html
+        template_path = 'patients/report.html' 
+        template = get_template(template_path)
+        html = template.render(context)
+
+        response = HttpResponse(content_type='application/pdf')
+        filename = f"Official_Report_{scan.patient.patient_uid}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        pisa_status = pisa.CreatePDF(html, dest=response)
+
+        if pisa_status.err:
+            return HttpResponse("PDF generation error", status=500)
+            
+        return response
+
+    except MRIScan.DoesNotExist:
+        return HttpResponse("Scan not found", status=404)
+    except Exception as e:
+        print(f"PDF Error: {e}")
+        return HttpResponse(f"Server Error: {str(e)}", status=500)

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, Calendar, Eye, AlertCircle, ClipboardList, X, Brain, FileText } from "lucide-react";
+import { Search, Filter, Calendar, Eye, AlertCircle, ClipboardList, X, Brain, FileText, Download } from "lucide-react";
 
 export default function DoctorDashboard() {
   const [scans, setScans] = useState([]);
@@ -46,6 +46,30 @@ export default function DoctorDashboard() {
   useEffect(() => {
     fetchScans();
   }, []);
+
+  // --- PDF DOWNLOAD FUNCTION (Alert Removed) ---
+  const downloadReport = async (scanId) => {
+    const token = localStorage.getItem("access");
+    try {
+        const res = await fetch(`http://127.0.0.1:8000/api/patients/scan/${scanId}/pdf/`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (!res.ok) throw new Error("Failed to generate PDF");
+        
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        // Use a clean filename
+        a.download = `Medical_Report_${scanId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error("Error downloading report:", err);
+    }
+  };
 
   const filteredScans = useMemo(() => {
     let list = [...scans];
@@ -304,8 +328,11 @@ export default function DoctorDashboard() {
                 </div>
 
                 <div className="p-6 border-t border-gray-100 bg-gray-50">
-                   <button className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm uppercase tracking-widest shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2">
-                     <FileText size={18} /> Generate Official Report PDF
+                   <button 
+                     onClick={() => downloadReport(selectedScan.id)}
+                     className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm uppercase tracking-widest shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+                   >
+                     <Download size={18} /> Generate Official Report PDF
                    </button>
                 </div>
               </div>

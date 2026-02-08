@@ -13,7 +13,7 @@ ROLE: Medical Treatment Database.
     PATIENT CONTEXT: {age}-year-old {gender} (Finding: {tumor_type})
 
     STRICT OUTPUT RULES:
-    1. Output exactly 8 lines.
+    1. Output exactly 5 lines.
     2. Format: * [Category]: [Drug/Treatment Name] - [Brief Action]
     3. you can give respose it subpoint if same Category like Category :/n 1. 2.
 
@@ -28,7 +28,7 @@ ROLE: Medical Treatment Database.
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.3,
@@ -50,9 +50,60 @@ ROLE: Medical Treatment Database.
         # 🔁 Optional fallback model
         try:
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-2.5-flash-lite",
                 contents=prompt
             )
             return response.text.strip()
         except:
             return "**System Note:** AI reasoning currently unavailable."
+        
+
+
+def generate_official_report_text(tumor_type, confidence, age, gender):
+    print("--- STARTING GEMINI REPORT GENERATION ---") 
+    try:
+        # 1. Initialize Client (Matches your imports)
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+        # 2. Create Prompt
+        prompt = f"""
+        ROLE: Board-Certified Neuroradiologist.
+        TASK: Write a formal "MRI Brain Diagnostic Report" for a PDF document.
+        
+        PATIENT DATA:
+        - Age: {age}
+        - Gender: {gender}
+        - Clinical Finding: {tumor_type.upper()}
+        - Confidence Score: {confidence:.2f}
+
+        INSTRUCTIONS:
+        - Write a complete clinical report.
+        - Section 1: CLINICAL INDICATION (Make up a plausible reason for scan based on the finding).
+        - Section 2: FINDINGS (Describe the tumor characteristics professionally).
+        - Section 3: IMPRESSION (Final diagnosis summary).
+        - Section 4: RECOMMENDATIONS (Standard neurosurgical/oncological protocols).
+        - Tone: Formal, medical, concise.
+        - Explain in deatail at least 10 paragraph
+        - Format: Plain text paragraphs. No markdown stars (**).
+        """
+
+        # 3. Generate using the Client method (Fixes the error)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        
+        print("--- GEMINI SUCCESS ---")
+        return response.text.strip()
+
+    except Exception as e:
+        print(f"❌ GEMINI ERROR: {e}")
+        # Fallback text
+        return (
+            "CLINICAL INDICATION: Screening for intracranial pathology.\n\n"
+            f"FINDINGS: An anomaly consistent with {tumor_type} was detected with {(confidence * 100):.1f}% confidence. "
+            "Further volumetric analysis is recommended.\n\n"
+            "IMPRESSION: Findings suggestive of neoplastic process. "
+            "Correlate with contrast-enhanced studies.\n\n"
+            "RECOMMENDATION: Neurosurgical consultation advised."
+        )
