@@ -62,10 +62,8 @@ ROLE: Medical Treatment Database.
 def generate_official_report_text(tumor_type, confidence, age, gender):
     print("--- STARTING GEMINI REPORT GENERATION ---") 
     try:
-        # 1. Initialize Client (Matches your imports)
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-        # 2. Create Prompt
         prompt = f"""
         ROLE: Board-Certified Neuroradiologist.
         TASK: Write a formal "MRI Brain Diagnostic Report" for a PDF document.
@@ -87,7 +85,6 @@ def generate_official_report_text(tumor_type, confidence, age, gender):
         - Format: Plain text paragraphs. No markdown stars (**).
         """
 
-        # 3. Generate using the Client method (Fixes the error)
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
@@ -98,7 +95,6 @@ def generate_official_report_text(tumor_type, confidence, age, gender):
 
     except Exception as e:
         print(f"❌ GEMINI ERROR: {e}")
-        # Fallback text
         return (
             "CLINICAL INDICATION: Screening for intracranial pathology.\n\n"
             f"FINDINGS: An anomaly consistent with {tumor_type} was detected with {(confidence * 100):.1f}% confidence. "
