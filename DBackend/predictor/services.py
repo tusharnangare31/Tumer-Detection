@@ -1,6 +1,9 @@
+import logging
 from google import genai
 from google.genai import types
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def generate_clinical_reasoning(tumor_type, confidence, age, gender):
@@ -40,27 +43,29 @@ ROLE: Medical Treatment Database.
     except Exception as e:
         error_msg = str(e)
 
-        # ⏳ Handle quota exhaustion gracefully
+        # Handle quota exhaustion gracefully
         if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
+            logger.warning(f"Gemini API quota exhausted: {error_msg}")
             return (
                 "**System Note:** AI reasoning temporarily unavailable due to "
                 "usage limits. Please retry after a short interval."
             )
 
-        # 🔁 Optional fallback model
+        # Fallback model attempt
+        logger.error(f"Gemini primary request failed: {error_msg}")
         try:
             response = client.models.generate_content(
                 model="gemini-2.5-flash-lite",
                 contents=prompt
             )
             return response.text.strip()
-        except:
+        except Exception as fallback_err:
+            logger.error(f"Gemini fallback also failed: {fallback_err}")
             return "**System Note:** AI reasoning currently unavailable."
-        
 
 
 def generate_official_report_text(tumor_type, confidence, age, gender):
-    print("--- STARTING GEMINI REPORT GENERATION ---") 
+    logger.info("Starting Gemini report generation")
     try:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -89,12 +94,12 @@ def generate_official_report_text(tumor_type, confidence, age, gender):
             model="gemini-2.5-flash",
             contents=prompt,
         )
-        
-        print("--- GEMINI SUCCESS ---")
+
+        logger.info("Gemini report generation successful")
         return response.text.strip()
 
     except Exception as e:
-        print(f"❌ GEMINI ERROR: {e}")
+        logger.error(f"Gemini report generation failed: {e}")
         return (
             "CLINICAL INDICATION: Screening for intracranial pathology.\n\n"
             f"FINDINGS: An anomaly consistent with {tumor_type} was detected with {(confidence * 100):.1f}% confidence. "

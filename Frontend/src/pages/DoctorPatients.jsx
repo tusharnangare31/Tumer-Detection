@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Users, AlertCircle, ChevronRight, Search, X, Activity, Stethoscope } from "lucide-react";
 import { motion } from "framer-motion";
+import { patientsAPI } from "../services/api";
 
 export default function DoctorPatient() {
   const [patients, setPatients] = useState([]);
@@ -18,22 +19,15 @@ export default function DoctorPatient() {
   }, []);
 
   const fetchRegistry = async () => {
-    const token = localStorage.getItem("access");
     try {
-      // Calls the specific Doctor Registry endpoint
-      const res = await fetch("http://127.0.0.1:8000/api/patients/doctor-registry/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      
-      if (res.status === 403) {
-        throw new Error("Access Denied: Physician privileges required.");
-      }
-      if (!res.ok) throw new Error("Failed to load patient registry");
-      
-      setPatients(data);
+      const res = await patientsAPI.getDoctorRegistry();
+      setPatients(res.data);
     } catch (err) {
-      setError(err.message || "Server not reachable");
+      if (err.response && err.response.status === 403) {
+        setError("Access Denied: Physician privileges required.");
+      } else {
+        setError(err.response?.data?.error || err.message || "Server not reachable");
+      }
     } finally {
       setLoading(false);
     }

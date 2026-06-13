@@ -157,6 +157,36 @@
         {% endif %}
     </div>
 
+    {% if doctor_review %}
+    <div class="section-title">Physician Review & Verification</div>
+    <div class="patient-box" style="margin-top: 5px; margin-bottom: 15px;">
+        <table>
+            <tr>
+                <td width="33%">
+                    <div class="info-label">Physician Verdict</div>
+                    <div class="info-value" style="color: #16a34a;">{{ doctor_review.final_diagnosis|upper }} (Verified)</div>
+                </td>
+                <td width="33%">
+                    <div class="info-label">Reviewing Physician</div>
+                    <div class="info-value">Dr. {{ doctor_review.doctor.username }}</div>
+                </td>
+                <td width="33%">
+                    <div class="info-label">Review Date</div>
+                    <div class="info-value">{{ doctor_review.reviewed_at|date:"d M Y H:i" }}</div>
+                </td>
+            </tr>
+            {% if doctor_review.comments %}
+            <tr>
+                <td colspan="3" style="padding-top: 10px; border-top: 1px solid #e2e8f0; margin-top: 10px;">
+                    <div class="info-label">Physician Comments</div>
+                    <div style="font-size: 10pt; color: #1e293b; padding-top: 4px;">{{ doctor_review.comments|linebreaksbr }}</div>
+                </td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+    {% endif %}
+
     <div class="section-title">Reference Scan</div>
     <div style="text-align: center; margin-top: 10px;">
         <img src="{{ scan.mri_image_url }}" style="height: 220px; border: 1px solid #ccc; padding: 4px;" />

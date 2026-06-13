@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LogIn, LogOut, UserCircle, Menu as MenuIcon, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { authAPI } from "../services/api";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -17,13 +18,8 @@ export default function Navbar() {
       setIsLoggedIn(!!token);
 
       if (token) {
-        fetch("http://127.0.0.1:8000/api/auth/me/", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-          .then((res) => res.json())
-          .then((data) => setUser(data))
+        authAPI.me()
+          .then((res) => setUser(res.data))
           .catch(() => setUser(null));
       } else {
         setUser(null);
@@ -37,6 +33,16 @@ export default function Navbar() {
       window.removeEventListener("authChanged", updateAuthState);
     };
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showMenu && !e.target.closest('.user-dropdown')) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
 
   const handleLogout = () => {
     localStorage.removeItem("access");
@@ -122,8 +128,6 @@ export default function Navbar() {
               <Link to="/doctor" className="hover:text-blue-200" onClick={closeMobileMenu}>Dashboard</Link>
               <Link to="/doctor/patients" className="hover:text-blue-200" onClick={closeMobileMenu}>All Patients</Link>
               <Link to="/doctor/scans" className="hover:text-blue-200" onClick={closeMobileMenu}>All Scans</Link>
-              <Link to="/doctor/reviews" className="hover:text-blue-200" onClick={closeMobileMenu}>Reviews</Link>
-              <Link to="/doctor/reports" className="hover:text-blue-200" onClick={closeMobileMenu}>Reports</Link>
             </>
           )}
 
@@ -141,7 +145,7 @@ export default function Navbar() {
               <span>Login</span>
             </motion.button>
           ) : (
-            <div className="relative">
+            <div className="relative user-dropdown">
               <UserCircle
                 size={34}
                 className="cursor-pointer hover:text-blue-200 hidden lg:block"

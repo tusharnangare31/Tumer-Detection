@@ -17,6 +17,7 @@ import Register from "./pages/Register";
 
 // Protected Logic
 import ProtectedRoute from "./components/ProtectedRoute";
+import NotFound from "./pages/NotFound";
 
 // Functional Pages
 import Detection from "./pages/Detection";
@@ -136,6 +137,7 @@ function App() {
               </ProtectedRoute>
             }
             />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
 

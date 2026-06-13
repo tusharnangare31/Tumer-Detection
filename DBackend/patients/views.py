@@ -1,3 +1,4 @@
+import logging
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,12 +11,14 @@ from xhtml2pdf import pisa
 
 from cloudinary.uploader import upload as cloudinary_upload
 
-from .models import Patient, MRIScan
+from .models import Patient, MRIScan, DoctorReview
 from predictor.utils import predict_image
 
 # ✅ CRITICAL IMPORT: This connects your View to the Gemini Service
 from predictor.services import generate_clinical_reasoning 
 from predictor.services import generate_official_report_text
+
+logger = logging.getLogger(__name__)
 
 
 # =========================================================
@@ -25,7 +28,7 @@ from predictor.services import generate_official_report_text
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def upload_scan(request):
-    print("--- DEBUG: Starting Upload Process ---") # Debug Log 1
+    logger.info("Starting Upload Process")
 
     patient_id = request.data.get("patient_id")
     scan_date_str = request.data.get("scan_date")
@@ -48,22 +51,22 @@ def upload_scan(request):
             formatted_date = scan_date_str.replace("T", " ")
             if len(formatted_date) == 16: formatted_date += ":00"
             scan_date = timezone.datetime.fromisoformat(formatted_date)
-        except:
+        except (ValueError, TypeError):
             scan_date = timezone.now()
     else:
         scan_date = timezone.now()
 
     # 1. CNN PREDICTION
     try:
-        print("--- DEBUG: Calling CNN Model... ---")
+        logger.info("Calling CNN Model...")
         tumor_type, confidence = predict_image(file)
-        print(f"--- DEBUG: CNN Result: {tumor_type} ({confidence}) ---")
+        logger.info(f"CNN Result: {tumor_type} ({confidence})")
     except Exception as e:
-        print("Prediction error:", e)
+        logger.error(f"Prediction error: {e}")
         return Response({"error": "CNN Prediction failed"}, status=500)
 
     # 2. GEMINI CLINICAL REASONING
-    print("--- DEBUG: Calling Gemini AI Service... ---") # Debug Log 2
+    logger.info("Calling Gemini AI Service...")
     try:
         clinical_reasoning = generate_clinical_reasoning(
             tumor_type=tumor_type,
@@ -71,10 +74,9 @@ def upload_scan(request):
             age=patient.age,
             gender=patient.gender
         )
-        print("--- DEBUG: Gemini Response Received! ---")
-        print(f"--- DEBUG: Length of reasoning: {len(clinical_reasoning)} chars ---")
+        logger.info(f"Gemini Response Received! Length of reasoning: {len(clinical_reasoning)} chars")
     except Exception as e:
-        print(f"--- DEBUG: Gemini Failed: {e} ---")
+        logger.error(f"Gemini Failed: {e}")
         clinical_reasoning = "Clinical reasoning unavailable."
 
     # Reset file pointer for Cloudinary
@@ -82,22 +84,22 @@ def upload_scan(request):
 
     # 3. CLOUDINARY UPLOAD
     try:
-        print("--- DEBUG: Uploading to Cloudinary... ---")
+        logger.info("Uploading to Cloudinary...")
         upload_result = cloudinary_upload(file, folder="mri_scans")
         mri_url = upload_result.get("secure_url")
     except Exception as e:
-        print("Cloudinary error:", e)
+        logger.error(f"Cloudinary error: {e}")
         return Response({"error": "Cloudinary upload failed"}, status=500)
 
     # 4. SAVE TO DATABASE
-    print("--- DEBUG: Saving to Database... ---")
+    logger.info("Saving to Database...")
     scan = MRIScan.objects.create(
         patient=patient,
         uploaded_by=request.user,
         mri_image_url=mri_url,
         tumor_type=tumor_type,
         confidence=confidence,
-        clinical_reasoning=clinical_reasoning, # ✅ Saving reasoning
+        clinical_reasoning=clinical_reasoning,
         status="COMPLETED",
         scan_date=scan_date,
     )
@@ -110,14 +112,14 @@ def upload_scan(request):
         "mri_image_url": mri_url,
         "tumor_type": tumor_type,
         "confidence": confidence,
-        "clinical_reasoning": clinical_reasoning, # ✅ Sending to Frontend
+        "clinical_reasoning": clinical_reasoning,
         "status": scan.status,
         "scan_date": scan.scan_date,
     }, status=201)
 
 
 # =========================================================
-# OTHER VIEWS (Keep as is)
+# OTHER VIEWS
 # =========================================================
 
 @api_view(["GET"])
@@ -147,16 +149,28 @@ def patient_detail(request, patient_id):
 
     scans = MRIScan.objects.filter(patient=patient).order_by("-scan_date", "-created_at")
 
-    scan_list = [{
-        "id": s.id,
-        "tumor_type": s.tumor_type,
-        "confidence": s.confidence,
-        "clinical_reasoning": s.clinical_reasoning, # ✅ Make sure this is here
-        "status": s.status,
-        "scan_date": s.scan_date,
-        "mri_image_url": s.mri_image_url,
-        "created_at": s.created_at,
-    } for s in scans]
+    scan_list = []
+    for s in scans:
+        review = s.doctor_reviews.first()
+        review_data = {
+            "comments": review.comments,
+            "final_diagnosis": review.final_diagnosis,
+            "verified": review.verified,
+            "doctor_username": review.doctor.username,
+            "reviewed_at": review.reviewed_at
+        } if review else None
+
+        scan_list.append({
+            "id": s.id,
+            "tumor_type": s.tumor_type,
+            "confidence": s.confidence,
+            "clinical_reasoning": s.clinical_reasoning,
+            "status": s.status,
+            "scan_date": s.scan_date,
+            "mri_image_url": s.mri_image_url,
+            "created_at": s.created_at,
+            "doctor_review": review_data
+        })
 
     return Response({
         "patient": {
@@ -177,24 +191,38 @@ def all_scans(request):
     scans = MRIScan.objects.all().order_by("-created_at")
     data = []
     for s in scans:
+        review = s.doctor_reviews.first()
+        review_data = {
+            "comments": review.comments,
+            "final_diagnosis": review.final_diagnosis,
+            "verified": review.verified,
+            "doctor_username": review.doctor.username,
+            "reviewed_at": review.reviewed_at
+        } if review else None
+
         data.append({
             "id": s.id,
             "patient": {"full_name": s.patient.full_name, "patient_uid": s.patient.patient_uid},
             "tumor_type": s.tumor_type,
             "confidence": s.confidence,
-            "clinical_reasoning": s.clinical_reasoning, # ✅ Make sure this is here
+            "clinical_reasoning": s.clinical_reasoning,
             "status": s.status,
             "mri_image_url": s.mri_image_url,
             "scan_date": s.scan_date,
             "created_at": s.created_at,
-            "uploaded_by_username": s.uploaded_by.username
+            "uploaded_by_username": s.uploaded_by.username,
+            "doctor_review": review_data
         })
     return Response(data)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_patients(request):
-    patients = Patient.objects.all().order_by('-created_at')
+    # Get patients that this technician has uploaded scans for
+    patient_ids = MRIScan.objects.filter(
+        uploaded_by=request.user
+    ).values_list('patient_id', flat=True).distinct()
+    patients = Patient.objects.filter(id__in=patient_ids).order_by('-created_at')
     data = [{
         "id": p.id,
         "patient_uid": p.patient_uid,
@@ -211,17 +239,29 @@ def my_patients(request):
 @permission_classes([IsAuthenticated])
 def my_scans(request):
     scans = MRIScan.objects.filter(uploaded_by=request.user).order_by("-created_at")
-    data = [{
-        "id": s.id,
-        "patient_uid": s.patient.patient_uid,
-        "patient_name": s.patient.full_name,
-        "tumor_type": s.tumor_type,
-        "confidence": s.confidence,
-        "clinical_reasoning": s.clinical_reasoning,
-        "status": s.status,
-        "scan_date": s.scan_date,
-        "mri_image_url": s.mri_image_url,
-    } for s in scans]
+    data = []
+    for s in scans:
+        review = s.doctor_reviews.first()
+        review_data = {
+            "comments": review.comments,
+            "final_diagnosis": review.final_diagnosis,
+            "verified": review.verified,
+            "doctor_username": review.doctor.username,
+            "reviewed_at": review.reviewed_at
+        } if review else None
+
+        data.append({
+            "id": s.id,
+            "patient_uid": s.patient.patient_uid,
+            "patient_name": s.patient.full_name,
+            "tumor_type": s.tumor_type,
+            "confidence": s.confidence,
+            "clinical_reasoning": s.clinical_reasoning,
+            "status": s.status,
+            "scan_date": s.scan_date,
+            "mri_image_url": s.mri_image_url,
+            "doctor_review": review_data
+        })
     return Response(data)
 
 @api_view(["POST"])
@@ -239,6 +279,17 @@ def create_patient(request):
         patient_uid=patient_uid, full_name=full_name, age=age, gender=gender,
         phone=request.data.get("phone", ""), address=request.data.get("address", "")
     )
+    
+    # After creating the patient, handle profile photo if provided
+    profile_photo = request.FILES.get("profile_photo")
+    if profile_photo:
+        try:
+            upload_result = cloudinary_upload(profile_photo, folder="patient_photos")
+            patient.profile_photo_url = upload_result.get("secure_url")
+            patient.save()
+        except Exception as e:
+            logger.warning(f"Profile photo upload failed: {e}")
+
     return Response({"message": "Patient created successfully", "id": patient.id}, status=201)
 
 @api_view(["GET"])
@@ -266,7 +317,7 @@ def generate_report_pdf(request, scan_id):
         
         # 1. GENERATE FRESH CONTENT
         # We ignore the database 'clinical_reasoning' and generate a new, official report.
-        print(f"Generating fresh official report for Scan #{scan.id}...")
+        logger.info(f"Generating fresh official report for Scan #{scan.id}...")
         
         official_report_text = generate_official_report_text(
             scan.tumor_type, 
@@ -281,7 +332,8 @@ def generate_report_pdf(request, scan_id):
             "scan": scan,
             "confidence_percent": round(scan.confidence * 100, 2),
             "generated_text": official_report_text, # <--- The new formal text
-            "date": timezone.now()
+            "date": timezone.now(),
+            "doctor_review": scan.doctor_reviews.first()
         }
         
         # 3. RENDER PDF
@@ -304,5 +356,56 @@ def generate_report_pdf(request, scan_id):
     except MRIScan.DoesNotExist:
         return HttpResponse("Scan not found", status=404)
     except Exception as e:
-        print(f"PDF Error: {e}")
+        logger.error(f"PDF Error: {e}")
         return HttpResponse(f"Server Error: {str(e)}", status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_review(request, scan_id):
+    try:
+        profile = getattr(request.user, 'profile', None)
+        if not profile or profile.role.upper() != 'DOCTOR':
+            return Response({"error": "Physician access required"}, status=403)
+        
+        try:
+            scan = MRIScan.objects.get(id=scan_id)
+        except MRIScan.DoesNotExist:
+            return Response({"error": "Scan not found"}, status=404)
+        
+        comments = request.data.get("comments", "")
+        final_diagnosis = request.data.get("final_diagnosis", scan.tumor_type)
+        verified = request.data.get("verified", False)
+        
+        # Create or update review
+        review, created = DoctorReview.objects.update_or_create(
+            scan=scan,
+            defaults={
+                "doctor": request.user,
+                "comments": comments,
+                "final_diagnosis": final_diagnosis,
+                "verified": verified
+            }
+        )
+        
+        # Update scan status
+        if verified:
+            scan.status = "VERIFIED"
+        else:
+            scan.status = "COMPLETED"
+        scan.save()
+        
+        return Response({
+            "message": "Review submitted successfully",
+            "review": {
+                "comments": review.comments,
+                "final_diagnosis": review.final_diagnosis,
+                "verified": review.verified,
+                "doctor_username": request.user.username,
+                "reviewed_at": review.reviewed_at
+            },
+            "scan_status": scan.status
+        }, status=200)
+    except Exception as e:
+        logger.exception("Failed to submit review")
+        return Response({"error": "Failed to submit review", "detail": str(e)}, status=500)

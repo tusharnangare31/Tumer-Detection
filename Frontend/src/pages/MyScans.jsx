@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ClipboardList, AlertCircle, Search, ExternalLink, Calendar, FileText, X, Brain, Shield } from "lucide-react";
 
+import { scansAPI } from "../services/api";
+
 export default function MyScans() {
   const [scans, setScans] = useState([]);
   const [error, setError] = useState("");
@@ -16,17 +18,12 @@ export default function MyScans() {
   }, []);
 
   const fetchScans = async () => {
-    const token = localStorage.getItem("access");
     setLoading(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/patients/my-scans/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error("Failed to load scans");
-      setScans(data);
+      const res = await scansAPI.getMyScans();
+      setScans(res.data);
     } catch (err) {
-      setError(err.message || "Server not reachable");
+      setError(err.response?.data?.error || err.message || "Server not reachable");
     } finally {
       setLoading(false);
     }

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { patientsAPI } from "../services/api";
+
 export default function PatientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -31,17 +33,12 @@ export default function PatientDetail() {
   }, [id]);
 
   const fetchDetail = async () => {
-    const token = localStorage.getItem("access");
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/patients/patient/${id}/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error("Failed to load patient data");
-      setPatient(data.patient);
-      setScans(data.scans);
+      const res = await patientsAPI.getPatientDetail(id);
+      setPatient(res.data.patient);
+      setScans(res.data.scans);
     } catch (err) {
-      setError(err.message || "Server not reachable");
+      setError(err.response?.data?.error || err.message || "Server not reachable");
     } finally {
       setLoading(false);
     }

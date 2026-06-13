@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Upload, Brain, CheckCircle, Loader2, ArrowLeft, Image as ImageIcon, Globe, Sparkles, FileText, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown"; // Import this to render Gemini output
+import { predictionAPI, scansAPI } from "../services/api";
 
 export default function UploadPage() {
   const location = useLocation();
@@ -39,32 +40,26 @@ export default function UploadPage() {
     const isClinicalMode = token && patientId;
     if (isClinicalMode) fd.append("patient_id", patientId);
 
-    const endpoint = isClinicalMode 
-      ? "http://127.0.0.1:8000/api/patients/upload-scan/" 
-      : "http://127.0.0.1:8000/api/predict/";
-
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: isClinicalMode ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      });
-      const data = await res.json();
+      const res = isClinicalMode
+        ? await scansAPI.uploadScan(fd)
+        : await predictionAPI.predict(fd);
+      const data = res.data;
       
-      if (res.ok) {
-        setResult({
-          tumor_type: data.tumor_type || data.prediction || data.label,
-          confidence: data.confidence || data.confidence_score || 0,
-          // ✅ Capture the Gemini Clinical Reasoning here
-          reasoning: data.clinical_reasoning || data.reasoning || null, 
-          isSaved: isClinicalMode
-        });
-      } else {
-        alert(data.error || "Analysis failed");
-      }
+      setResult({
+        tumor_type: data.tumor_type || data.prediction || data.label,
+        confidence: data.confidence || data.confidence_score || 0,
+        // ✅ Capture the Gemini Clinical Reasoning here
+        reasoning: data.clinical_reasoning || data.reasoning || null, 
+        isSaved: isClinicalMode
+      });
     } catch (err) {
       console.error(err);
-      alert("Server connection failed");
+      if (err.response) {
+        alert(err.response.data?.error || "Analysis failed");
+      } else {
+        alert("Server connection failed");
+      }
     } finally {
       setLoading(false);
     }

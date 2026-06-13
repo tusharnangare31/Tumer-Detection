@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Users, AlertCircle, Plus, ChevronRight, Search, X } from "lucide-react";
 import { motion } from "framer-motion";
+import { patientsAPI } from "../services/api";
 
 export default function MyPatients() {
   const [patients, setPatients] = useState([]);
@@ -18,16 +19,11 @@ export default function MyPatients() {
   }, []);
 
   const fetchPatients = async () => {
-    const token = localStorage.getItem("access");
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/patients/my-patients/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error("Failed to load patients");
-      setPatients(data);
+      const res = await patientsAPI.getMyPatients();
+      setPatients(res.data);
     } catch (err) {
-      setError(err.message || "Server not reachable");
+      setError(err.response?.data?.error || err.message || "Server not reachable");
     } finally {
       setLoading(false);
     }

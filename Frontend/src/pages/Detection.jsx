@@ -20,6 +20,7 @@ import {
   Sparkles, // Added for AI icon
   FileText, // Added for Protocol icon
 } from "lucide-react";
+import { patientsAPI, scansAPI } from "../services/api";
 
 export default function Detection() {
   const [patientId, setPatientId] = useState(null);
@@ -63,29 +64,8 @@ export default function Detection() {
 
     const delay = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `http://127.0.0.1:8000/api/patients/by-uid/${patient.patient_uid}/`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (res.status === 404) {
-          setPatientId(null);
-          setPatient((prev) => ({
-            ...prev,
-            full_name: "",
-            age: "",
-            gender: "Male",
-            phone: "",
-            address: "",
-          }));
-          return;
-        }
-
-        if (!res.ok) return;
-
-        const data = await res.json();
+        const res = await patientsAPI.getPatientByUID(patient.patient_uid);
+        const data = res.data;
         setPatientId(data.id);
         setPatient((prev) => ({
           ...prev,
@@ -96,7 +76,19 @@ export default function Detection() {
           address: data.address || "",
         }));
       } catch (err) {
-        console.error("Search error:", err);
+        if (err.response && err.response.status === 404) {
+          setPatientId(null);
+          setPatient((prev) => ({
+            ...prev,
+            full_name: "",
+            age: "",
+            gender: "Male",
+            phone: "",
+            address: "",
+          }));
+        } else {
+          console.error("Search error:", err);
+        }
       }
     }, 600);
 
@@ -182,21 +174,14 @@ export default function Detection() {
       formData.append("patient_id", patientId);
       if (scanDate) formData.append("scan_date", scanDate);
 
-      const res = await fetch("http://127.0.0.1:8000/api/patients/upload-scan/", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setFormError(data?.error || "Upload failed");
-        return;
-      }
-      setResult(data);
+      const res = await scansAPI.uploadScan(formData);
+      setResult(res.data);
     } catch (err) {
-      setFormError("Server not reachable");
+      if (err.response) {
+        setFormError(err.response.data?.error || "Upload failed");
+      } else {
+        setFormError("Server not reachable");
+      }
     } finally {
       setLoading(false);
     }

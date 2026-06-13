@@ -2,9 +2,12 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { LogIn, Lock, User, AlertCircle } from "lucide-react";
+import { authAPI } from "../services/api";
+import { useToast } from "../context/ToastContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [formData, setFormData] = useState({
     username: "",
@@ -33,24 +36,12 @@ export default function Login() {
 
     try {
       // 🔐 LOGIN REQUEST
-      const res = await fetch("http://127.0.0.1:8000/api/auth/login/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          username: formData.username,
-          password: formData.password
-        })
+      const res = await authAPI.login({
+        username: formData.username,
+        password: formData.password
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setErrors("Invalid username or password");
-        setLoading(false);
-        return;
-      }
+      const data = res.data;
 
       // ✅ SAVE TOKENS
       localStorage.setItem("access", data.access);
@@ -59,11 +50,19 @@ export default function Login() {
       // 🔔 NOTIFY NAVBAR (IMPORTANT)
       window.dispatchEvent(new Event("authChanged"));
 
+      toast.success("Welcome back! Logged in successfully.");
+
       // ✅ GO TO HOME PAGE
       navigate("/");
 
     } catch (err) {
-      setErrors("Server not reachable");
+      if (err.response) {
+        setErrors("Invalid username or password");
+        toast.error("Login failed: Invalid username or password");
+      } else {
+        setErrors("Server not reachable");
+        toast.error("Login failed: Server not reachable");
+      }
     } finally {
       setLoading(false);
     }

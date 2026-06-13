@@ -1,8 +1,11 @@
 import React, { useState, useRef } from "react";
 import { User, Phone, MapPin, Calendar, Image as ImageIcon, Loader2, Hash, Users, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { patientsAPI } from "../services/api";
+import { useToast } from "../context/ToastContext";
 
 export default function CreatePatient() {
+  const toast = useToast();
   const [form, setForm] = useState({
     patient_uid: "",
     full_name: "",
@@ -32,30 +35,23 @@ export default function CreatePatient() {
   };
 
   const submit = async () => {
-    const token = localStorage.getItem("access");
-    if (!token) return setMsg({ type: "error", text: "Session expired. Please login." });
-
     const fd = new FormData();
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
     if (photo) fd.append("profile_photo", photo);
 
     try {
       setLoading(true);
-      const res = await fetch("http://127.0.0.1:8000/api/patients/create/", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
+      await patientsAPI.create(fd);
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Validation failed");
-
+      toast.success(`Patient ${form.full_name} registered successfully!`);
       setMsg({ type: "success", text: "Patient record created successfully!" });
       setForm({ patient_uid: "", full_name: "", age: "", gender: "Male", phone: "", address: "" });
       setPhoto(null);
       setPreview(null);
     } catch (err) {
-      setMsg({ type: "error", text: err.message });
+      const errMsg = err.response?.data?.error || err.message || "Validation failed";
+      setMsg({ type: "error", text: errMsg });
+      toast.error(`Admission failed: ${errMsg}`);
     } finally {
       setLoading(false);
     }

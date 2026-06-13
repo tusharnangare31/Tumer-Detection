@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, Calendar, Eye, AlertCircle, ClipboardList, X, Brain, FileText, Download } from "lucide-react";
+import { Search, Filter, Calendar, Eye, AlertCircle, ClipboardList, X, Brain, FileText, Download, CheckCircle } from "lucide-react";
+import { scansAPI } from "../services/api";
+import { useToast } from "../context/ToastContext";
 
 export default function DoctorDashboard() {
+  const toast = useToast();
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -17,27 +20,49 @@ export default function DoctorDashboard() {
   // Modal
   const [selectedScan, setSelectedScan] = useState(null);
 
+  // Physician Review Form State
+  const [reviewComments, setReviewComments] = useState("");
+  const [finalDiagnosis, setFinalDiagnosis] = useState("");
+  const [isVerified, setIsVerified] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+
+  // Initialize review fields when selectedScan changes
+  useEffect(() => {
+    if (selectedScan) {
+      setReviewComments(selectedScan.doctor_review?.comments || "");
+      setFinalDiagnosis(selectedScan.doctor_review?.final_diagnosis || selectedScan.tumor_type || "");
+      setIsVerified(selectedScan.doctor_review?.verified || false);
+      setEditMode(false);
+    }
+  }, [selectedScan]);
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await scansAPI.submitReview(selectedScan.id, {
+        comments: reviewComments,
+        final_diagnosis: finalDiagnosis,
+        verified: isVerified,
+      });
+      toast.success("Physician review submitted successfully!");
+      // Update scans list in place
+      setScans(prev => prev.map(s => s.id === selectedScan.id ? { ...s, status: res.data.scan_status, doctor_review: res.data.review } : s));
+      // Update selectedScan so modal redraws
+      setSelectedScan(prev => ({ ...prev, status: res.data.scan_status, doctor_review: res.data.review }));
+      setEditMode(false);
+    } catch (err) {
+      toast.error("Failed to submit review: " + (err.response?.data?.error || err.message));
+    }
+  };
+
   const fetchScans = async () => {
     setLoading(true);
     setError("");
-    const token = localStorage.getItem("access");
-    if (!token) {
-      setError("You are not logged in.");
-      setLoading(false);
-      return;
-    }
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/patients/scans/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data?.error || "Failed to load scans");
-        return;
-      }
-      setScans(Array.isArray(data) ? data : data.scans || []);
+      const res = await scansAPI.getAllScans();
+      setScans(Array.isArray(res.data) ? res.data : res.data.scans || []);
     } catch (err) {
-      setError("Server not reachable");
+      setError(err.response?.data?.error || "Server not reachable");
     } finally {
       setLoading(false);
     }
@@ -49,15 +74,9 @@ export default function DoctorDashboard() {
 
   // --- PDF DOWNLOAD FUNCTION (Alert Removed) ---
   const downloadReport = async (scanId) => {
-    const token = localStorage.getItem("access");
     try {
-        const res = await fetch(`http://127.0.0.1:8000/api/patients/scan/${scanId}/pdf/`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        
-        if (!res.ok) throw new Error("Failed to generate PDF");
-        
-        const blob = await res.blob();
+        const res = await scansAPI.downloadPDF(scanId);
+        const blob = res.data;
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -209,38 +228,54 @@ export default function DoctorDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredScans.map((scan) => (
-                <tr key={scan.id} className="hover:bg-indigo-50/10 transition-colors group">
-                  <td className="py-4 px-6">
-                    <div>
-                      <p className="font-bold text-gray-900">{scan.patient?.full_name}</p>
-                      <p className="text-xs text-gray-500 font-mono">{scan.patient?.patient_uid}</p>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className={tumorBadge(scan.tumor_type)}>{scan.tumor_type}</span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-500" style={{ width: `${scan.confidence * 100}%` }}></div>
+              {loading ? (
+                [...Array(4)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td colSpan="5" className="py-6 px-6">
+                      <div className="h-10 bg-gray-50 rounded-xl w-full"></div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredScans.length > 0 ? (
+                filteredScans.map((scan) => (
+                  <tr key={scan.id} className="hover:bg-indigo-50/10 transition-colors group">
+                    <td className="py-4 px-6">
+                      <div>
+                        <p className="font-bold text-gray-900">{scan.patient?.full_name}</p>
+                        <p className="text-xs text-gray-500 font-mono">{scan.patient?.patient_uid}</p>
                       </div>
-                      <span className="text-xs font-bold text-gray-600">{(scan.confidence * 100).toFixed(0)}%</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-gray-500 font-medium">
-                    {new Date(scan.scan_date || scan.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="py-4 px-6 text-right">
-                    <button 
-                      onClick={() => setSelectedScan(scan)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-indigo-600 font-bold text-xs hover:bg-indigo-50 hover:border-indigo-100 transition-all shadow-sm"
-                    >
-                      <Eye size={14} /> Review
-                    </button>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className={tumorBadge(scan.tumor_type)}>{scan.tumor_type}</span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-500" style={{ width: `${scan.confidence * 100}%` }}></div>
+                        </div>
+                        <span className="text-xs font-bold text-gray-600">{(scan.confidence * 100).toFixed(0)}%</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-gray-500 font-medium">
+                      {new Date(scan.scan_date || scan.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <button 
+                        onClick={() => setSelectedScan(scan)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-indigo-600 font-bold text-xs hover:bg-indigo-50 hover:border-indigo-100 transition-all shadow-sm"
+                      >
+                        <Eye size={14} /> Review
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="py-12 text-center text-gray-400 font-medium">
+                    No scans found matching the criteria.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -323,6 +358,92 @@ export default function DoctorDashboard() {
                       <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 text-center text-gray-400 italic">
                         No clinical reasoning data generated for this scan.
                       </div>
+                    )}
+                  </div>
+
+                  {/* Physician Review & Verification */}
+                  <div className="border-t border-gray-100 pt-6">
+                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-indigo-600" />
+                      Physician Review & Verification
+                    </h3>
+
+                    {selectedScan.doctor_review && !editMode ? (
+                      <div className="space-y-4">
+                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5">
+                          <div className="flex items-center gap-2 mb-2 text-emerald-800 font-bold text-sm">
+                            <CheckCircle size={16} />
+                            Verified by Dr. {selectedScan.doctor_review.doctor_username}
+                          </div>
+                          <p className="text-[10px] text-gray-400 font-medium mb-3">Reviewed on {new Date(selectedScan.doctor_review.reviewed_at).toLocaleString()}</p>
+                          <div className="space-y-2 text-sm text-emerald-950 font-semibold">
+                            <p><strong>Final Diagnosis:</strong> {selectedScan.doctor_review.final_diagnosis}</p>
+                            <p><strong>Physician Comments:</strong> {selectedScan.doctor_review.comments || "No comments entered."}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => setEditMode(true)}
+                          className="text-xs font-bold text-indigo-600 hover:underline"
+                        >
+                          Modify Review
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleReviewSubmit} className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Final Diagnosis</label>
+                          <input 
+                            type="text" 
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-medium text-gray-700"
+                            value={finalDiagnosis}
+                            onChange={(e) => setFinalDiagnosis(e.target.value)}
+                            placeholder="e.g. Glioma, Meningioma, No Tumor"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Physician Notes & Comments</label>
+                          <textarea 
+                            rows="3"
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-medium text-gray-700"
+                            value={reviewComments}
+                            onChange={(e) => setReviewComments(e.target.value)}
+                            placeholder="Add physician notes, comments, or recommendations..."
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="checkbox" 
+                            id="verify-checkbox"
+                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            checked={isVerified}
+                            onChange={(e) => setIsVerified(e.target.checked)}
+                          />
+                          <label htmlFor="verify-checkbox" className="text-sm font-bold text-gray-700 select-none">
+                            Mark scan as verified and officially diagnosed
+                          </label>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <button 
+                            type="submit" 
+                            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                          >
+                            Submit Review
+                          </button>
+                          {selectedScan.doctor_review && (
+                            <button 
+                              type="button" 
+                              onClick={() => setEditMode(false)}
+                              className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </form>
                     )}
                   </div>
                 </div>

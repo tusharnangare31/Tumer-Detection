@@ -1,7 +1,10 @@
 import os
+import logging
 import numpy as np
 from PIL import Image
 from tensorflow.keras.models import load_model
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model_fixed.h5")
@@ -14,9 +17,9 @@ _model = None  # cache model in memory
 def get_model():
     global _model
     if _model is None:
-        print(f"Loading model from {MODEL_PATH}")
+        logger.info(f"Loading model from {MODEL_PATH}")
         _model = load_model(MODEL_PATH)
-        print("Model loaded successfully")
+        logger.info("Model loaded successfully")
     return _model
 
 

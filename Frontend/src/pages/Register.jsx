@@ -2,9 +2,12 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { UserPlus, Lock, User, AlertCircle } from "lucide-react";
+import { authAPI } from "../services/api";
+import { useToast } from "../context/ToastContext";
 
 export default function Register() {
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [formData, setFormData] = useState({
     username: "",
@@ -33,27 +36,24 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/auth/register/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(formData)
+      await authAPI.register({
+        username: formData.username,
+        password: formData.password,
+        role: formData.role
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Registration failed");
-        setLoading(false);
-        return;
-      }
-
+      toast.success("User created successfully! Redirecting to login...");
       setSuccess("User created successfully");
       setTimeout(() => navigate("/login"), 1500);
 
     } catch (err) {
-      setError("Server not reachable");
+      if (err.response) {
+        setError(err.response.data?.error || "Registration failed");
+        toast.error(`Registration failed: ${err.response.data?.error || "Invalid details"}`);
+      } else {
+        setError("Server not reachable");
+        toast.error("Registration failed: Server not reachable");
+      }
     } finally {
       setLoading(false);
     }
