@@ -3,8 +3,8 @@
 set -o errexit
 
 # Install dependencies
-pip install -r DBackend/requirements.txt
+pip install -r ./Tumer-Detection/DBackend/requirements.txt
 
 # Run migrations and collect static files
-python DBackend/manage.py collectstatic --no-input
-python DBackend/manage.py migrate
+python ./Tumer-Detection/DBackend/manage.py collectstatic --no-input
+python ./Tumer-Detection/DBackend/manage.py migrate
