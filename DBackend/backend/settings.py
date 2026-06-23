@@ -35,7 +35,21 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-qe6hzlz^#70yqyi4n(*e)kzs6q
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = [host.strip().strip('"').strip("'") for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,tumor-detection-api.onrender.com').split(',')]
+raw_allowed_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,tumor-detection-api.onrender.com').split(',')
+ALLOWED_HOSTS = []
+for host in raw_allowed_hosts:
+    host = host.strip().strip('"').strip("'").lower()
+    if host.startswith('http://'):
+        host = host[7:]
+    elif host.startswith('https://'):
+        host = host[8:]
+    if host.endswith('/'):
+        host = host[:-1]
+    if ':' in host:
+        host = host.split(':')[0]
+    if host:
+        ALLOWED_HOSTS.append(host)
+
 
 
 # Application definition
@@ -67,8 +81,17 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+raw_cors = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,https://tumor-detection-web.onrender.com').split(',')
+CORS_ALLOWED_ORIGINS = []
+for origin in raw_cors:
+    origin = origin.strip().strip('"').strip("'")
+    if origin.endswith('/'):
+        origin = origin[:-1]
+    if origin:
+        CORS_ALLOWED_ORIGINS.append(origin)
+
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all in development
-CORS_ALLOWED_ORIGINS = [origin.strip().strip('"').strip("'") for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,https://tumor-detection-web.onrender.com').split(',')]
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
