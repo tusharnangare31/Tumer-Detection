@@ -35,7 +35,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-qe6hzlz^#70yqyi4n(*e)kzs6q
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = [host.strip().strip('"').strip("'") for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,tumor-detection-api.onrender.com').split(',')]
 
 
 # Application definition
@@ -68,7 +68,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all in development
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
+CORS_ALLOWED_ORIGINS = [origin.strip().strip('"').strip("'") for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,https://tumor-detection-web.onrender.com').split(',')]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
